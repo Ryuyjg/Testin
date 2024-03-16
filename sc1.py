@@ -52,7 +52,7 @@ async def get_chat_ids(app: Client):
     chat_with_topic = {}
     async for dialog in app.get_dialogs():
         if dialog.chat.is_forum == True:
-            chat_with_topic[dialog.chat.id]=dialog.top_message.topic.id
+            chat_with_topic[dialog.chat.id]=dialog.top_message.topics.id
         chat_ids.append(dialog.chat.id)
         chat_ids = [str(chat_id) for chat_id in chat_ids if str(chat_id).startswith('-')]
         chat_ids = [int(chat_id) for chat_id in chat_ids]
