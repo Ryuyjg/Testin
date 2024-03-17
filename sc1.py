@@ -51,7 +51,7 @@ async def get_chat_ids(app: Client):
     chat_ids = []
     chat_with_topic = {}
     async for dialog in app.get_dialogs():
-        if dialog.chat.is_forum == True:
+        if hasattr(dialog.chat ,'is_forum') and  dialog.chat.is_forum == True:
             try:
                chat_with_topic[dialog.chat.id]=dialog.top_message.topics.id
             except AttributeError:
