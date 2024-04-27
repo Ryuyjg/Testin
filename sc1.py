@@ -144,7 +144,10 @@ async def main():
         if a == 2:
             numtime = int(input("How many times you want to send the message: "))
             timee = int(input("Enter the time delay: "))
-            await send_last_message_to_groups(apps, timee, numtime)
+            try:
+                await send_last_message_to_groups(apps, timee, numtime)
+            except Exception as e:
+                print(e)
             #await apps[0].send_message(-1001752971759, text = "Hello!!", message_thread_id=4510)
 
         elif a == 3:
