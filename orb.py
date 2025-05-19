@@ -24,13 +24,52 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-# Auto-Reply Message (Updated as requested)
-AUTO_REPLY_MESSAGE = """
-Message To @OrgJhonySins For buying Membership...
-Refund Guaratieed if didint get satisfaction 
+# Auto-Reply Message (Updated to just "Dm @OrbitService")
+AUTO_REPLY_MESSAGE = "Dm @OrbitService"
 
-no demo or screen short
-pay and take directly or leave instantlyy.....
+# Promotional Message (Updated as per request)
+PROMO_MESSAGE = """
+ORBIT ADBOT SCRIPT
+
+🎁 Introducing the Ultimate Telegram Automation Service!
+
+⚡️ Are you tired of manually managing your Telegram groups?
+⚡️ Looking for a fast, efficient, and affordable solution to forward messages, manage accounts, and streamline your workflow?
+
+🔥 Here We Present:
+The Most Advanced Telegram Automation Tool by @OrbitService
+
+💡 Key Features:
+- Auto Forward Messages: Send your saved messages to ALL your groups in just a few clicks.
+- Smart Group Management: Automatically leave groups where messages can't be sent.
+- Custom Rounds & Delays: Choose how many times to forward and set custom delays for maximum safety.
+- Banned Account Handling: Seamlessly skip banned accounts and continue with active ones without interruptions.
+- 24/7 Reliability: Runs non-stop until you manually stop it. Handles internet downtimes effortlessly!
+
+📈 Why Choose Us?
+- Lightning-fast performance.
+- User-friendly and highly customizable.
+- Designed to keep your accounts safe with built-in delay and error handling.
+- Affordable Pricing for individuals and businesses alike!
+
+✔️ Take control of your Telegram management like never before.
+Join the growing community of professionals and businesses using @OrbitService's advanced tools.
+
+❤️ Contact us today to get started!
+Don't miss out - the future of Telegram automation is here.
+
+✔️ Price just 499 INR / $10 (Non-negotiable) - Cheapest on Telegram!
+
+⚠️ Special Feature: Auto Reply Without Premium
+
+▶️ Contact: @OrbitService
+
+👛 Payment Methods Accepted:
+- UPI
+- Crypto
+
+👑 DM: @OrbitService
+⚡️ Proof & Shop: Check Bio of @OrbitService
 """
 
 def display_banner():
@@ -52,27 +91,8 @@ def load_credentials(session_name):
             return json.load(f)
     return {}
 
-async def get_last_saved_message(client):
-    """Retrieve the last message from 'Saved Messages'."""
-    try:
-        saved_messages_peer = await client.get_input_entity('me')
-        history = await client(GetHistoryRequest(
-            peer=saved_messages_peer,
-            limit=1,
-            offset_id=0,
-            offset_date=None,
-            add_offset=0,
-            max_id=0,
-            min_id=0,
-            hash=0
-        ))
-        return history.messages[0] if history.messages else None
-    except Exception as e:
-        logging.error(f"Failed to retrieve saved messages: {str(e)}")
-        return None
-
-async def forward_messages_to_groups(client, last_message, session_name):
-    """Forward the last saved message to all groups with random delays."""
+async def forward_promo_to_groups(client, session_name):
+    """Forward the promotional message to all groups with random delays."""
     try:
         dialogs = await client.get_dialogs()
         group_dialogs = [dialog for dialog in dialogs if dialog.is_group]
@@ -86,17 +106,17 @@ async def forward_messages_to_groups(client, last_message, session_name):
         for dialog in group_dialogs:
             group = dialog.entity
             try:
-                await client.forward_messages(group, last_message)
-                print(Fore.GREEN + f"[{session_name}] Forwarded to {group.title}")
-                logging.info(f"[{session_name}] Forwarded to {group.title}")
+                await client.send_message(group, PROMO_MESSAGE)
+                print(Fore.GREEN + f"[{session_name}] Sent promo to {group.title}")
+                logging.info(f"[{session_name}] Sent promo to {group.title}")
             except FloodWaitError as e:
                 print(Fore.RED + f"[{session_name}] Flood wait: {e.seconds} seconds")
                 await asyncio.sleep(e.seconds)
-                await client.forward_messages(group, last_message)
-                print(Fore.GREEN + f"[{session_name}] Forwarded after wait to {group.title}")
+                await client.send_message(group, PROMO_MESSAGE)
+                print(Fore.GREEN + f"[{session_name}] Sent after wait to {group.title}")
             except Exception as e:
-                print(Fore.RED + f"[{session_name}] Failed to forward to {group.title}: {str(e)}")
-                logging.error(f"[{session_name}] Failed to forward to {group.title}: {str(e)}")
+                print(Fore.RED + f"[{session_name}] Failed to send to {group.title}: {str(e)}")
+                logging.error(f"[{session_name}] Failed to send to {group.title}: {str(e)}")
 
             # Random delay between 15-30 seconds
             delay = random.randint(15, 30)
@@ -104,8 +124,8 @@ async def forward_messages_to_groups(client, last_message, session_name):
             await asyncio.sleep(delay)
 
     except Exception as e:
-        print(Fore.RED + f"[{session_name}] Forwarding error: {str(e)}")
-        logging.error(f"[{session_name}] Forwarding error: {str(e)}")
+        print(Fore.RED + f"[{session_name}] Promo sending error: {str(e)}")
+        logging.error(f"[{session_name}] Promo sending error: {str(e)}")
 
 async def setup_auto_reply(client, session_name):
     """Set up auto-reply to private messages."""
@@ -125,7 +145,7 @@ async def setup_auto_reply(client, session_name):
                 logging.error(f"[{session_name}] Failed to reply: {str(e)}")
 
 async def run_session(session_name, credentials):
-    """Run both forwarding and auto-reply for a session."""
+    """Run both promo sending and auto-reply for a session."""
     client = TelegramClient(
         StringSession(credentials["string_session"]),
         credentials["api_id"],
@@ -139,14 +159,9 @@ async def run_session(session_name, credentials):
         # Start auto-reply
         await setup_auto_reply(client, session_name)
         
-        # Continuous forwarding with 15 minute intervals
+        # Continuous promo sending with 15 minute intervals
         while True:
-            last_message = await get_last_saved_message(client)
-            if last_message:
-                await forward_messages_to_groups(client, last_message, session_name)
-            else:
-                print(Fore.RED + f"[{session_name}] No saved message found")
-            
+            await forward_promo_to_groups(client, session_name)
             print(Fore.YELLOW + f"[{session_name}] Waiting 15 minutes before next round...")
             await asyncio.sleep(900)  # 15 minutes
             
@@ -184,7 +199,7 @@ async def main():
 
             tasks.append(run_session(session_name, credentials))
 
-        print(Fore.GREEN + "\nStarting all sessions (Auto-Reply + Forwarding)...")
+        print(Fore.GREEN + "\nStarting all sessions (Auto-Reply + Promo Sending)...")
         await asyncio.gather(*tasks)
 
     except KeyboardInterrupt:
