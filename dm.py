@@ -22,7 +22,7 @@ init(autoreset=True)
 # Configuration
 CREDENTIALS_FOLDER = 'sessions'
 os.makedirs(CREDENTIALS_FOLDER, exist_ok=True)
-TARGET_USER = "OrbitService"  # Target username for DM forwarding
+TARGET_USER = "OgDigital"  # Target username for DM forwarding
 
 # Timing Settings
 MIN_DELAY = 15  # Minimum delay between groups (seconds)
@@ -38,12 +38,12 @@ logging.basicConfig(
 )
 
 # Auto-Reply Message
-AUTO_REPLY_MESSAGE = "Dm @OrbitService"
+AUTO_REPLY_MESSAGE = "Dm @OGDIGITAL"
 
 def display_banner():
     """Display the banner"""
     print(Fore.RED + pyfiglet.figlet_format("ORBIT ADBOT"))
-    print(Fore.GREEN + "By @OrbitService\n")
+    print(Fore.GREEN + "By @OgDigital\n")
 
 def save_credentials(session_name, credentials):
     """Save session credentials"""
