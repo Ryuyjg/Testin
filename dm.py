@@ -14,6 +14,7 @@ from telethon.errors import (
     PeerIdInvalidError
 )
 from colorama import init, Fore
+from datetime import datetime
 
 # Initialize colorama
 init(autoreset=True)
@@ -41,7 +42,7 @@ AUTO_REPLY_MESSAGE = "Dm @OGDIGITAL"
 
 def display_banner():
     """Minimal banner for Termux"""
-    print(Fore.RED + """
+    print(Fore.GREEN + """
      ██████╗ ██████╗ ██████╗ ██╗████████╗
      ██╔═══██╗██╔══██╗██╔══██╗██║╚══██╔══╝
      ██║   ██║██████╔╝██████╔╝██║   ██║   
@@ -49,7 +50,7 @@ def display_banner():
      ╚██████╔╝██║  ██║██████╔╝██║   ██║   
       ╚═════╝ ╚═╝  ╚═╝╚═════╝ ╚═╝   ╚═╝   
     """)
-    print(Fore.GREEN + "ORBIT ADBOT - Termux Optimized v2.0\n")
+    print(Fore.GREEN + "ORBIT ADBOT - Termux Optimized v2.1\n")
     print(Fore.YELLOW + f"• Concurrent Sessions: {MAX_CONCURRENT}")
     print(Fore.YELLOW + f"• Delay Range: {MIN_DELAY}-{MAX_DELAY}s")
     print(Fore.YELLOW + f"• Cycle Delay: {CYCLE_DELAY//60} mins\n")
@@ -105,7 +106,7 @@ async def safe_forward(client, group, message, session_name):
     return False
 
 async def process_groups(client, session_name, message):
-    """Efficient group processing"""
+    """Efficient group processing with delay display"""
     if not message:
         return
 
@@ -125,16 +126,19 @@ async def process_groups(client, session_name, message):
     
     processed = 0
     for group in groups:
-        start_time = asyncio.get_event_loop().time()
+        start_time = datetime.now()
         
         if await safe_forward(client, group, message, session_name):
             processed += 1
         
-        # Dynamic delay calculation
-        elapsed = asyncio.get_event_loop().time() - start_time
-        remaining = max(0, random.uniform(MIN_DELAY, MAX_DELAY) - elapsed)
-        if remaining > 0:
-            await asyncio.sleep(remaining)
+        # Calculate and display delay
+        elapsed = (datetime.now() - start_time).total_seconds()
+        delay = random.uniform(MIN_DELAY, MAX_DELAY)
+        remaining_delay = max(0, delay - elapsed)
+        
+        if remaining_delay > 0:
+            print(Fore.BLUE + f"[{session_name}] Waiting {remaining_delay:.1f}s before next group")
+            await asyncio.sleep(remaining_delay)
     
     print(Fore.CYAN + f"[{session_name}] Sent to {processed}/{len(groups)} groups")
 
