@@ -28,7 +28,7 @@ TARGET_USER = "OgDigital"  # Target username for DM forwarding
 MIN_DELAY = 15  # Minimum delay between groups (seconds)
 MAX_DELAY = 30  # Maximum delay between groups (seconds)
 CYCLE_DELAY = 900  # 15 minutes between full cycles (seconds)
-MAX_CONCURRENT = 10  # Number of accounts to run simultaneously
+MAX_CONCURRENT = 20  # Number of accounts to run simultaneously
 
 # Set up logging
 logging.basicConfig(
