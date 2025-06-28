@@ -23,16 +23,11 @@ logging.basicConfig(
 )
 
 AUTO_REPLY_MESSAGE = """
-This Id Working For Otp Wallah
-[ https://t.me/otpsellers4 ]
+This account is managed by @OgDigital
 
-This Powerful Ads Running By @OrbitService 
+For buying/selling accounts, please DM @OgDigital directly.
 
-Shop : @OrbitShoppy 
-
-Proofs @LegitProofs99
-
-[ Message To @OrbitService Only For Run Ads And Buy Telegram And WhatsApp Accounts.. For Other All Otp's Msge to [ https://t.me/otpsellers4  ] Otp Wallah
+Official channel: @OgDigital
 """
 
 def save_credentials(session_name, api_id, api_hash, session_string):
@@ -52,8 +47,8 @@ def load_credentials(session_name):
     return None
 
 def display_banner():
-    print(Fore.RED + pyfiglet.figlet_format("Og_Flame"))
-    print(Fore.GREEN + "Made by @Og_Flame | @OrbitService\n")
+    print(Fore.RED + pyfiglet.figlet_format("OgDigital Forwarder"))
+    print(Fore.GREEN + "Managed by @OgDigital\n")
 
 async def auto_reply(client, session_name):
     @client.on(events.NewMessage(incoming=True))
@@ -73,11 +68,21 @@ async def forward_with_delay(client, last_message, session_name, group, delay):
     try:
         await asyncio.sleep(delay)  # Wait for the specified delay
         await client.send_message(group, last_message.message, link_preview=False)
-        print(Fore.GREEN + f"Message Sent to {group.title} from {session_name}")
+        print(Fore.GREEN + f"Message forwarded to {group.title} from {session_name}")
     except errors.FloodWaitError as e:
         await asyncio.sleep(e.seconds)
     except Exception as e:
         logging.error(f"Forward Error: {str(e)}")
+
+async def get_last_ogdigital_message(client):
+    try:
+        ogdigital_entity = await client.get_input_entity('@Ogdigital')
+        messages = await client.get_messages(ogdigital_entity, limit=1)
+        if messages:
+            return messages[0]
+    except Exception as e:
+        print(Fore.RED + f"Error getting @Ogdigital messages: {str(e)}")
+    return None
 
 async def initialize_session(session_name, credentials):
     try:
@@ -92,23 +97,11 @@ async def initialize_session(session_name, credentials):
             print(Fore.RED + f"Session authorization failed for {session_name}")
             return None, None
 
-        saved_peer = await client.get_input_entity('me')
-        history = await client(GetHistoryRequest(
-            peer=saved_peer,
-            limit=1,
-            offset_id=0,
-            offset_date=None,
-            add_offset=0,
-            max_id=0,
-            min_id=0,
-            hash=0
-        ))
-
-        if not history.messages:
-            print(Fore.RED + f"No messages in Saved Messages for {session_name}")
+        last_message = await get_last_ogdigital_message(client)
+        if not last_message:
+            print(Fore.RED + f"No messages found from @Ogdigital for {session_name}")
             return None, None
 
-        last_message = history.messages[0]
         asyncio.create_task(auto_reply(client, session_name))
         return client, last_message
 
@@ -156,6 +149,11 @@ async def main():
         # Process actions with delays
         while True:
             for index, (client, last_message, session_name) in enumerate(active_clients):
+                # Update the last message from @Ogdigital before forwarding
+                updated_message = await get_last_ogdigital_message(client)
+                if updated_message:
+                    last_message = updated_message
+                
                 async for dialog in client.iter_dialogs():
                     if dialog.is_group:
                         await forward_with_delay(
