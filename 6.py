@@ -1,452 +1,318 @@
+#!/usr/bin/env python3
 import asyncio
 import os
 import json
 import random
 import logging
-import gc
-from datetime import datetime
-from telethon import TelegramClient, events, functions, types
+import socket
+import time
+from telethon import TelegramClient, events, types
 from telethon.sessions import StringSession
 from telethon.errors import (
     UserDeactivatedBanError,
     FloodWaitError,
     ChannelPrivateError,
     ChatWriteForbiddenError,
-    ChannelInvalidError,
     PeerIdInvalidError
 )
-from colorama import init, Fore, Style
-import pyfiglet
+from colorama import init, Fore
+from datetime import datetime
 
 # Initialize colorama
 init(autoreset=True)
 
-# Try to import psutil with fallback
-try:
-    import psutil
-    PSUTIL_AVAILABLE = True
-except ImportError:
-    PSUTIL_AVAILABLE = False
-
-# Configuration
-CREDENTIALS_FOLDER = 'sessions'
+# Configuration - Optimized for Termux
+CREDENTIALS_FOLDER = 'tdata'
 os.makedirs(CREDENTIALS_FOLDER, exist_ok=True)
-TARGET_USER = "OrbitService"  # Target username for DM forwarding
+TARGET_USER = "OgDigital"  # Target username for DM forwarding
 
-# Timing Settings
-MIN_DELAY = 15  # Minimum delay between groups (seconds)
-MAX_DELAY = 30  # Maximum delay between groups (seconds)
-CYCLE_DELAY = 900  # 15 minutes between full cycles (seconds)
+# Optimized Timing Settings
+MIN_DELAY = 25  # Minimum delay between groups (seconds)
+MAX_DELAY = 45  # Maximum delay between groups (seconds)
+CYCLE_DELAY = 1200  # 20 minutes between full cycles (seconds)
+MAX_CONCURRENT = 20  # 20 concurrent sessions like original
+MAX_RETRIES = 2  # Maximum retry attempts
 
-# Enhanced Memory Configuration
-MEMORY_CHECK_INTERVAL = 15  # Check memory every 15 operations
-FORCE_CLEAN_THRESHOLD = 70  # Force cleanup when memory exceeds 70%
-AGGRESSIVE_CLEAN_THRESHOLD = 80  # Emergency cleanup threshold
-MAX_MEMORY_RETRIES = 3  # Max retries if memory remains high
-
-# Forwarding Mode
-FORWARD_MODE = 1  # 1 = Forward from OrbitService DM, 2 = Forward from public post link
-POST_LINK = None  # Will store the shared post link
-
-# Set up logging
+# Lightweight logging
 logging.basicConfig(
-    filename='orbit_service.log',
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    level=logging.WARNING,
+    format='%(asctime)s - %(message)s'
 )
 
 # Auto-Reply Message
-AUTO_REPLY_MESSAGE = "Dm @OrbitService"
+AUTO_REPLY_MESSAGE = "Dm @OGDIGITAL"
 
-def clear_memory(session_name=None, aggressive=False):
-    """Enhanced memory cleanup with multiple strategies"""
-    mem_before = None
-    mem_after = None
-    
-    if PSUTIL_AVAILABLE:
-        process = psutil.Process(os.getpid())
-        mem_before = process.memory_percent()
-        if mem_before >= AGGRESSIVE_CLEAN_THRESHOLD:
-            aggressive = True
-    
-    # Level 1: Standard cleanup
-    gc.collect()
-    
-    # Level 2: Aggressive cleanup
-    if aggressive:
-        display_status("Performing aggressive memory cleanup", "warning", session_name)
-        for i in range(3):  # Triple collection pass
-            gc.collect()
-            gc.collect(2)  # Collect older generations
-            if hasattr(gc, 'mem_free'):  # If available (PyPy)
-                gc.mem_free()
-    
-    if PSUTIL_AVAILABLE:
-        mem_after = process.memory_percent()
-        log_msg = f"[Memory] {mem_before:.2f}% → {mem_after:.2f}%"
-        if aggressive:
-            log_msg += " (aggressive)"
-        if session_name:
-            log_msg = f"[{session_name}] {log_msg}"
-        logging.info(log_msg)
-        return mem_after
-    return None
+def check_internet_connection(host="8.8.8.8", port=53, timeout=5):
+    """Check internet connection with timeout"""
+    try:
+        socket.create_connection((host, port), timeout=timeout)
+        return True
+    except socket.error:
+        return False
 
-def display_status(message, status_type="info", session_name=None):
-    """Prints colored status messages with optional session prefix"""
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    prefix = f"[{session_name}] " if session_name else ""
-    
-    status_colors = {
-        "success": Fore.GREEN,
-        "error": Fore.RED,
-        "warning": Fore.YELLOW,
-        "info": Fore.CYAN
-    }
-    
-    color = status_colors.get(status_type.lower(), Fore.CYAN)
-    print(f"{color}{timestamp} {prefix}{message}{Style.RESET_ALL}")
-    
-    # Also log to file
-    log_level = getattr(logging, status_type.upper(), logging.INFO)
-    logging.log(log_level, f"{prefix}{message}")
-
-def display_memory_status(session_name=None):
-    """Display current memory status if psutil is available"""
-    if not PSUTIL_AVAILABLE:
-        return
-        
-    process = psutil.Process(os.getpid())
-    mem_info = process.memory_percent()
-    status = f"Memory usage: {mem_info:.2f}%"
-    
-    if mem_info > AGGRESSIVE_CLEAN_THRESHOLD:
-        display_status(status, "error", session_name)
-    elif mem_info > FORCE_CLEAN_THRESHOLD:
-        display_status(status, "warning", session_name)
-    else:
-        display_status(status, "info", session_name)
-    
-    return mem_info
+async def wait_for_internet():
+    """Wait until internet connection is available"""
+    print(Fore.YELLOW + "Waiting for internet connection...")
+    while not check_internet_connection():
+        print(Fore.RED + "No internet connection. Retrying in 10 seconds...")
+        await asyncio.sleep(10)
+    print(Fore.GREEN + "Internet connection available!")
 
 def display_banner():
-    """Display the banner"""
-    print(Fore.RED + pyfiglet.figlet_format("ORBIT ADBOT"))
-    display_status("By @OrbitService", "success")
-    
-    # Show memory capabilities in banner
-    if PSUTIL_AVAILABLE:
-        display_status(f"Advanced memory monitoring (Clean at {FORCE_CLEAN_THRESHOLD}%/{AGGRESSIVE_CLEAN_THRESHOLD}%)", "success")
-    else:
-        display_status("Basic memory management (install psutil for advanced monitoring)", "warning")
+    """Minimal banner for Termux"""
+    print(Fore.GREEN + """
+     ██████╗ ██████╗ ██████╗ ██╗████████╗
+     ██╔═══██╗██╔══██╗██╔══██╗██║╚══██╔══╝
+     ██║   ██║██████╔╝██████╔╝██║   ██║   
+     ██║   ██║██╔══██╗██╔══██╗██║   ██║   
+     ╚██████╔╝██║  ██║██████╔╝██║   ██║   
+      ╚═════╝ ╚═╝  ╚═╝╚═════╝ ╚═╝   ╚═╝   
+    """)
+    print(Fore.GREEN + "ORBIT ADBOT - Termux Optimized v2.1\n")
+    print(Fore.YELLOW + f"• Concurrent Sessions: {MAX_CONCURRENT}")
+    print(Fore.YELLOW + f"• Delay Range: {MIN_DELAY}-{MAX_DELAY}s")
+    print(Fore.YELLOW + f"• Cycle Delay: {CYCLE_DELAY//60} mins\n")
 
-def save_credentials(session_name, credentials):
-    """Save session credentials"""
-    path = os.path.join(CREDENTIALS_FOLDER, f"{session_name}.json")
-    with open(path, "w") as f:
-        json.dump(credentials, f)
-    display_status(f"Credentials saved for {session_name}", "success")
+def save_session(session_name, data):
+    """Save session data with error handling"""
+    try:
+        path = os.path.join(CREDENTIALS_FOLDER, f"{session_name}.json")
+        with open(path, 'w') as f:
+            json.dump(data, f)
+    except Exception:
+        pass
 
-def load_credentials(session_name):
-    """Load session credentials"""
-    path = os.path.join(CREDENTIALS_FOLDER, f"{session_name}.json")
-    if os.path.exists(path):
-        with open(path, "r") as f:
-            return json.load(f)
+def load_session(session_name):
+    """Load session data with error handling"""
+    try:
+        path = os.path.join(CREDENTIALS_FOLDER, f"{session_name}.json")
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                return json.load(f)
+    except Exception:
+        pass
     return None
 
-async def memory_safety_check(session_name, operation_count):
-    """Enhanced memory monitoring with recovery strategies"""
-    if not PSUTIL_AVAILABLE:
-        if operation_count % 50 == 0:  # Basic fallback
-            clear_memory(session_name)
-        return True
-    
-    process = psutil.Process(os.getpid())
-    mem_info = process.memory_percent()
-    
-    # Emergency check
-    if mem_info >= AGGRESSIVE_CLEAN_THRESHOLD:
-        display_status(f"CRITICAL MEMORY: {mem_info:.2f}% - Emergency cleanup", "error", session_name)
-        clear_memory(session_name, aggressive=True)
-        await asyncio.sleep(2)  # Recovery pause
-        return False if process.memory_percent() >= AGGRESSIVE_CLEAN_THRESHOLD else True
-    
-    # Regular threshold check
-    if mem_info >= FORCE_CLEAN_THRESHOLD or operation_count % MEMORY_CHECK_INTERVAL == 0:
-        display_status(f"Memory threshold: {mem_info:.2f}%", "warning", session_name)
-        clear_memory(session_name)
-        await asyncio.sleep(1)  # Short pause after cleanup
-    
-    return True
-
-async def get_last_dm_message(client, session_name):
-    """Get last message from target user's DM"""
+async def get_last_message(client):
+    """Get last message with minimal requests"""
     try:
-        entity = await client.get_entity(TARGET_USER)
-        messages = await client.get_messages(entity, limit=10)
-        
-        for msg in messages:
-            # Skip service messages and empty messages
-            if not isinstance(msg, types.MessageService) and msg.message:
-                return msg
-                
-        display_status("No forwardable messages in DM", "warning", session_name)
-        return None
-        
-    except PeerIdInvalidError:
-        display_status(f"Not in DM with @{TARGET_USER}", "error", session_name)
-        return None
+        entity = await client.get_input_entity(TARGET_USER)
+        messages = await client.get_messages(entity, limit=1)
+        return messages[0] if messages else None
     except Exception as e:
-        display_status(f"DM error: {str(e)}", "error", session_name)
+        print(Fore.RED + f"Error getting message: {str(e)}")
         return None
 
-async def get_post_from_link(client, session_name):
-    """Get a post from the shared public link and forward to Saved Messages"""
-    global POST_LINK
-    try:
-        if not POST_LINK:
-            return None
-            
-        # Parse the link to get channel and post ID
-        if "t.me/" not in POST_LINK:
-            display_status("Invalid Telegram link", "error", session_name)
-            return None
-            
-        parts = POST_LINK.split("/")
-        if len(parts) < 2:
-            display_status("Invalid link format", "error", session_name)
-            return None
-            
-        channel = parts[-2]
-        post_id = int(parts[-1])
-        
-        # Get the entity and message
-        entity = await client.get_entity(channel)
-        msg = await client.get_messages(entity, ids=post_id)
-        
-        if not msg:
-            display_status("Post not found", "error", session_name)
-            return None
-            
-        # Forward to Saved Messages
-        saved = await client.get_entity("me")
-        forwarded_msg = await client.forward_messages(saved, msg)
-        display_status("Post forwarded to Saved Messages", "success", session_name)
-        return forwarded_msg
-        
-    except ValueError:
-        display_status("Invalid post ID in link", "error", session_name)
-    except ChannelInvalidError:
-        display_status("Channel is private or inaccessible", "error", session_name)
-    except Exception as e:
-        display_status(f"Post link error: {str(e)}", "error", session_name)
-    return None
-
-async def forward_to_group(client, group, message, session_name, operation_count):
-    """Reliable message forwarding with retries and memory management"""
-    try:
-        # Memory check before each forward
-        if not await memory_safety_check(session_name, operation_count):
-            raise MemoryError("Memory too high to continue")
-            
-        await client.forward_messages(group, message)
-        display_status(f"Sent to {getattr(group, 'title', 'UNKNOWN')}", "success", session_name)
-        return True
-    except FloodWaitError as e:
-        wait = min(e.seconds, 30)  # Cap at 30 seconds
-        display_status(f"Flood wait: {wait}s", "warning", session_name)
-        await asyncio.sleep(wait)
-        return await forward_to_group(client, group, message, session_name, operation_count)
-    except (ChannelPrivateError, ChatWriteForbiddenError):
-        display_status("No access to group", "warning", session_name)
-        return False
-    except Exception as e:
-        display_status(f"Forward error: {str(e)}", "error", session_name)
-        return False
+async def safe_forward(client, group, message, session_name):
+    """Safe message forwarding with retries"""
+    for attempt in range(MAX_RETRIES):
+        try:
+            await client.forward_messages(group, message)
+            print(Fore.GREEN + f"[{session_name}] Sent to {getattr(group, 'title', 'GROUP')}")
+            return True
+        except FloodWaitError as e:
+            wait = min(e.seconds, 30)
+            print(Fore.YELLOW + f"[{session_name}] Flood wait: {wait}s")
+            await asyncio.sleep(wait)
+        except (ChannelPrivateError, ChatWriteForbiddenError):
+            print(Fore.YELLOW + f"[{session_name}] No access")
+            return False
+        except Exception as e:
+            print(Fore.RED + f"[{session_name}] Error: {type(e).__name__} - {str(e)}")
+            if attempt == MAX_RETRIES - 1:
+                return False
+            await asyncio.sleep(5)
+    return False
 
 async def process_groups(client, session_name, message):
-    """Process all groups with strict timing control and memory management"""
-    try:
-        dialogs = await client.get_dialogs()
-        groups = [d.entity for d in dialogs if d.is_group]
-        
-        if not groups:
-            display_status("No groups found", "warning", session_name)
-            return
+    """Efficient group processing with delay display"""
+    if not message:
+        print(Fore.YELLOW + f"[{session_name}] No message to forward")
+        return
 
-        display_status(f"Processing {len(groups)} groups", "info", session_name)
-        
-        operation_count = 0
-        for group in groups:
-            start_time = asyncio.get_event_loop().time()
-            
-            success = await forward_to_group(client, group, message, session_name, operation_count)
-            if success:
-                operation_count += 1
-            
-            # Calculate remaining delay time
-            elapsed = asyncio.get_event_loop().time() - start_time
-            remaining_delay = max(0, random.randint(MIN_DELAY, MAX_DELAY) - elapsed)
-            
-            if remaining_delay > 0:
-                display_status(f"Waiting {remaining_delay:.1f}s", "info", session_name)
-                await asyncio.sleep(remaining_delay)
-                
+    groups = []
+    try:
+        async for dialog in client.iter_dialogs():
+            if dialog.is_group:
+                groups.append(dialog.entity)
     except Exception as e:
-        display_status(f"Group error: {str(e)}", "error", session_name)
-    finally:
-        # Force cleanup after processing all groups
-        clear_memory(session_name, aggressive=True)
+        print(Fore.RED + f"[{session_name}] Error getting groups: {str(e)}")
+        return
+
+    if not groups:
+        print(Fore.YELLOW + f"[{session_name}] No groups found")
+        return
+
+    print(Fore.CYAN + f"[{session_name}] Processing {len(groups)} groups")
+    
+    processed = 0
+    for group in groups:
+        start_time = datetime.now()
+        
+        if await safe_forward(client, group, message, session_name):
+            processed += 1
+        
+        # Calculate and display delay
+        elapsed = (datetime.now() - start_time).total_seconds()
+        delay = random.uniform(MIN_DELAY, MAX_DELAY)
+        remaining_delay = max(0, delay - elapsed)
+        
+        if remaining_delay > 0:
+            print(Fore.BLUE + f"[{session_name}] Waiting {remaining_delay:.1f}s before next group")
+            await asyncio.sleep(remaining_delay)
+    
+    print(Fore.CYAN + f"[{session_name}] Sent to {processed}/{len(groups)} groups")
 
 async def setup_auto_reply(client, session_name):
-    """Efficient auto-reply setup with memory management"""
+    """Lightweight auto-reply"""
     @client.on(events.NewMessage(incoming=True))
     async def handler(event):
-        if event.is_private and event.sender_id != (await client.get_me()).id:
+        if event.is_private:
             try:
                 await event.reply(AUTO_REPLY_MESSAGE)
-                display_status("Replied to DM", "success", session_name)
-                clear_memory(session_name)
-            except FloodWaitError as e:
-                await asyncio.sleep(min(e.seconds, 30))
-                await event.reply(AUTO_REPLY_MESSAGE)
+                print(Fore.MAGENTA + f"[{session_name}] Auto-replied")
             except Exception as e:
-                display_status(f"Auto-reply error: {str(e)}", "error", session_name)
+                print(Fore.RED + f"[{session_name}] Auto-reply failed: {str(e)}")
 
-async def run_session(session_name, credentials):
-    """Enhanced session runner with better memory management"""
-    client = None
-    retry_count = 0
-    
-    while retry_count < MAX_MEMORY_RETRIES:
+async def manage_session(session_name, credentials):
+    """Robust session management with internet monitoring"""
+    while True:
+        client = None
         try:
+            print(Fore.CYAN + f"[{session_name}] Starting session...")
+            
+            # Wait for internet before starting
+            if not check_internet_connection():
+                print(Fore.YELLOW + f"[{session_name}] Waiting for internet...")
+                await wait_for_internet()
+            
             client = TelegramClient(
                 StringSession(credentials["string_session"]),
                 credentials["api_id"],
                 credentials["api_hash"],
-                device_model=f"OrbitBot-{random.randint(1000,9999)}",
-                system_version="4.16.30-vxCustom",
-                connection_retries=2,
-                request_retries=2,
-                auto_reconnect=True
+                device_model="Android",
+                system_version="10",
+                app_version="8.4",
+                lang_code="en",
+                system_lang_code="en-US"
             )
             
-            await client.start()
-            display_status("Session started", "success", session_name)
+            # Connect with timeout
+            print(Fore.YELLOW + f"[{session_name}] Connecting to Telegram...")
+            await client.connect()
             
-            operation_count = 0
+            # Check if authorized
+            if not await client.is_user_authorized():
+                print(Fore.RED + f"[{session_name}] Session not authorized")
+                return
+                
+            print(Fore.GREEN + f"[{session_name}] Successfully connected!")
+            
             await setup_auto_reply(client, session_name)
-            
+
+            # Main operation loop
             while True:
                 try:
-                    # Memory check before each major operation
-                    if not await memory_safety_check(session_name, operation_count):
-                        retry_count += 1
-                        raise MemoryError("High memory persists after cleanup")
+                    # Check internet before operation
+                    if not check_internet_connection():
+                        print(Fore.YELLOW + f"[{session_name}] Internet lost, waiting...")
+                        await wait_for_internet()
+                        # Reconnect after internet restore
+                        await client.connect()
                     
-                    if FORWARD_MODE == 1:
-                        # Mode 1: Forward from OrbitService DM
-                        message = await get_last_dm_message(client, session_name)
-                    else:
-                        # Mode 2: Forward from public post link
-                        message = await get_post_from_link(client, session_name)
+                    message = await get_last_message(client)
+                    await process_groups(client, session_name, message)
                     
-                    if message:
-                        await process_groups(client, session_name, message)
-                        operation_count += 1
+                    print(Fore.YELLOW + f"[{session_name}] Cycle completed. Sleeping for {CYCLE_DELAY//60} minutes...")
                     
-                    # Between-cycle cleanup
-                    mem_status = ""
-                    if PSUTIL_AVAILABLE:
-                        mem_status = f" (Mem: {psutil.Process(os.getpid()).memory_percent():.2f}%)"
-                    display_status(f"Cycle complete{mem_status}", "info", session_name)
-                    clear_memory(session_name, aggressive=True)
-                    await asyncio.sleep(CYCLE_DELAY)
-                    
-                except MemoryError:
-                    if retry_count >= MAX_MEMORY_RETRIES:
-                        display_status("Max memory retries exceeded", "error", session_name)
-                        break
-                    await asyncio.sleep(10 * retry_count)  # Exponential backoff
+                    # Sleep with periodic internet checks
+                    for i in range(CYCLE_DELAY // 30):
+                        if not check_internet_connection():
+                            print(Fore.YELLOW + f"[{session_name}] Internet check failed")
+                            break
+                        await asyncio.sleep(30)
+                        
                 except Exception as e:
-                    display_status(f"Operation error: {str(e)}", "error", session_name)
-                    await asyncio.sleep(300)
-            
+                    print(Fore.RED + f"[{session_name}] Operation error: {type(e).__name__} - {str(e)}")
+                    await asyncio.sleep(60)
+
         except UserDeactivatedBanError:
-            display_status("Account banned", "error", session_name)
+            print(Fore.RED + f"[{session_name}] Account banned")
             break
         except Exception as e:
-            display_status(f"Session crash: {str(e)}", "error", session_name)
-            retry_count += 1
-            if retry_count >= MAX_MEMORY_RETRIES:
-                display_status("Max retries exceeded", "error", session_name)
-                break
-            await asyncio.sleep(30 * retry_count)  # Exponential backoff
+            print(Fore.RED + f"[{session_name}] Connection failed: {type(e).__name__} - {str(e)}")
+            print(Fore.YELLOW + f"[{session_name}] Retrying in 30 seconds...")
+            await asyncio.sleep(30)
         finally:
             if client:
-                await client.disconnect()
-            clear_memory(session_name, aggressive=True)
-    
-    display_status("Session ended", "warning", session_name)
+                try:
+                    await client.disconnect()
+                    print(Fore.YELLOW + f"[{session_name}] Disconnected")
+                except:
+                    pass
 
 async def main():
-    """Main execution with unlimited concurrent sessions"""
-    global POST_LINK, FORWARD_MODE
-    
+    """Optimized main function with internet monitoring"""
     display_banner()
-    
+
+    # Initial internet check
+    if not check_internet_connection():
+        print(Fore.RED + "No internet connection detected")
+        await wait_for_internet()
+
     try:
-        # Select forwarding mode
-        print("\nSelect forwarding mode:")
-        print("1. Forward from @OrbitService DM (default)")
-        print("2. Forward from public post link")
-        mode_choice = input("Enter choice (1/2): ").strip()
-        if mode_choice == "2":
-            FORWARD_MODE = 2
-            POST_LINK = input("Enter the public post link (t.me/...) to forward: ").strip()
-    
-        num_sessions = int(input("Enter number of sessions: "))
-        if num_sessions <= 0:
-            raise ValueError("Positive number required")
-                
-        # Prepare all sessions
-        sessions = []
+        # Simple session management
+        num_sessions = min(20, int(input("Enter number of sessions (1-20): ")))
+        if num_sessions < 1:
+            raise ValueError("At least 1 session required")
+
+        tasks = []
         for i in range(1, num_sessions + 1):
             session_name = f"session{i}"
-            creds = load_credentials(session_name)
+            creds = load_session(session_name)
             
             if not creds:
-                display_status(f"Enter details for {session_name}:", "info")
+                print(Fore.CYAN + f"\nConfiguring {session_name}:")
                 creds = {
                     "api_id": int(input("API ID: ")),
                     "api_hash": input("API Hash: "),
                     "string_session": input("String Session: ")
                 }
-                save_credentials(session_name, creds)
-                
-            sessions.append((session_name, creds))
+                save_session(session_name, creds)
+            
+            tasks.append(manage_session(session_name, creds))
 
-        # Process all sessions without concurrency limit
-        display_status(f"Starting {len(sessions)} sessions", "success")
+        # Run all sessions with 20 concurrent limit
+        print(Fore.GREEN + f"Starting {len(tasks)} sessions with {MAX_CONCURRENT} concurrent...")
         
-        # Run all sessions concurrently
-        await asyncio.gather(*[run_session(name, creds) for name, creds in sessions])
+        # Concurrent execution with limit
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT)
         
-    except ValueError as e:
-        display_status(f"Input error: {str(e)}", "error")
-    except KeyboardInterrupt:
-        display_status("Stopped by user", "warning")
+        async def limited_task(task):
+            async with semaphore:
+                await task
+                
+        await asyncio.gather(*[limited_task(task) for task in tasks], return_exceptions=True)
+
+    except (ValueError, KeyboardInterrupt):
+        print(Fore.YELLOW + "\nOperation cancelled")
     except Exception as e:
-        display_status(f"Fatal: {str(e)}", "error")
-    finally:
-        # Final memory cleanup
-        clear_memory("MAIN", aggressive=True)
+        print(Fore.RED + f"Fatal error: {type(e).__name__} - {str(e)}")
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        display_status("Script stopped", "warning")
-    finally:
-        clear_memory("MAIN", aggressive=True)
+    # Auto-restart mechanism
+    restart_count = 0
+    while restart_count < 10:  # Prevent infinite restart loop
+        try:
+            asyncio.run(main())
+        except KeyboardInterrupt:
+            print(Fore.YELLOW + "\nScript stopped by user")
+            break
+        except Exception as e:
+            restart_count += 1
+            print(Fore.RED + f"Script crashed: {type(e).__name__}")
+            print(Fore.YELLOW + f"Restarting in 10 seconds... (Attempt {restart_count}/10)")
+            time.sleep(10)
+    
+    if restart_count >= 10:
+        print(Fore.RED + "Too many restarts. Please check your configuration.")
