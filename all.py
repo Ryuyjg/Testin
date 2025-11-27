@@ -24,7 +24,7 @@ init(autoreset=True)
 # Configuration - Optimized for Termux
 CREDENTIALS_FOLDER = 'tdata'
 os.makedirs(CREDENTIALS_FOLDER, exist_ok=True)
-TARGET_USER = "OgDigital"  # Target username for DM forwarding
+TARGET_USER = "Og_Digital"  # Target username for DM forwarding
 
 # Updated Timing Settings - 1 to 2 minutes between groups
 MIN_DELAY = 60   # 1 minute minimum delay between groups (seconds)
@@ -39,7 +39,7 @@ logging.basicConfig(
 )
 
 # Auto-Reply Message
-AUTO_REPLY_MESSAGE = "Dm @OGDIGITAL"
+AUTO_REPLY_MESSAGE = "Dm @Og_Digital For Buy"
 
 def check_internet_connection(host="8.8.8.8", port=53, timeout=5):
     """Check internet connection with timeout"""
