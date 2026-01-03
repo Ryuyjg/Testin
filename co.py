@@ -13,7 +13,8 @@ from telethon.errors import (
     FloodWaitError,
     ChannelPrivateError,
     ChatWriteForbiddenError,
-    PeerIdInvalidError
+    PeerIdInvalidError,
+    SecurityError
 )
 from colorama import init, Fore
 from datetime import datetime
@@ -279,16 +280,38 @@ async def manage_session(session_name, credentials):
                 system_lang_code="en-US"
             )
             
-            # Connect with timeout
-            print(Fore.YELLOW + f"[{session_name}] Connecting to Telegram...")
-            await client.connect()
+            # Set connection retries to handle security errors
+            client.session.set_dc(2, '149.154.167.40', 443)
             
-            # Check if authorized
-            if not await client.is_user_authorized():
-                print(Fore.RED + f"[{session_name}] Session not authorized")
-                return
-                
-            print(Fore.GREEN + f"[{session_name}] Successfully connected!")
+            # Connect with timeout and retry on security error
+            print(Fore.YELLOW + f"[{session_name}] Connecting to Telegram...")
+            
+            for connect_attempt in range(3):
+                try:
+                    await client.connect()
+                    
+                    # Check if authorized
+                    if not await client.is_user_authorized():
+                        print(Fore.RED + f"[{session_name}] Session not authorized")
+                        return
+                    
+                    # Test connection with a simple request
+                    try:
+                        me = await client.get_me()
+                        if me:
+                            print(Fore.GREEN + f"[{session_name}] Successfully connected as @{me.username if me.username else me.id}!")
+                            break
+                    except SecurityError:
+                        print(Fore.YELLOW + f"[{session_name}] Security error during connection, retrying...")
+                        await asyncio.sleep(5)
+                        continue
+                        
+                except (ConnectionError, SecurityError, OSError) as e:
+                    if connect_attempt < 2:
+                        print(Fore.YELLOW + f"[{session_name}] Connection attempt {connect_attempt + 1} failed, retrying...")
+                        await asyncio.sleep(5)
+                    else:
+                        raise e
             
             await setup_auto_reply(client, session_name)
 
@@ -329,6 +352,10 @@ async def manage_session(session_name, credentials):
                             break
                         await asyncio.sleep(30)
                         
+                except SecurityError as e:
+                    print(Fore.RED + f"[{session_name}] Security error detected: {str(e)}")
+                    print(Fore.YELLOW + f"[{session_name}] Reconnecting session...")
+                    break  # Break inner loop to restart session
                 except Exception as e:
                     print(Fore.RED + f"[{session_name}] Operation error: {type(e).__name__} - {str(e)}")
                     await asyncio.sleep(60)
@@ -336,6 +363,10 @@ async def manage_session(session_name, credentials):
         except UserDeactivatedBanError:
             print(Fore.RED + f"[{session_name}] Account banned")
             break
+        except SecurityError as e:
+            print(Fore.RED + f"[{session_name}] Security error: {str(e)}")
+            print(Fore.YELLOW + f"[{session_name}] Waiting 60 seconds before retry...")
+            await asyncio.sleep(60)
         except Exception as e:
             print(Fore.RED + f"[{session_name}] Connection failed: {type(e).__name__} - {str(e)}")
             print(Fore.YELLOW + f"[{session_name}] Retrying in 30 seconds...")
