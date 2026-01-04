@@ -24,7 +24,7 @@ init(autoreset=True)
 # Configuration - Optimized for Termux
 CREDENTIALS_FOLDER = 'tdata'
 os.makedirs(CREDENTIALS_FOLDER, exist_ok=True)
-TARGET_USER = "OgDigital"  # Target username for DM forwarding
+TARGET_USER = "Orgjhonysins"  # Target username for DM forwarding
 
 # Updated Timing Settings - 1 to 2 minutes between groups
 MIN_DELAY = 60   # 1 minute minimum delay between groups (seconds)
