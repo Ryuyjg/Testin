@@ -16,7 +16,7 @@ Then run: <code>python3 -c "from tri import load_sessions_from_file; load_sessio
  elif data.startswith("list_sessions_"):
      page = int(data.split("_")[-1])
      await query.edit_message_text(
-         f"<b>📋 Sessions (Page {page+1})</b>",
+         f"<b>Sessions (Page {page+1})</b>",
          reply_markup=create_session_keyboard(page),
          parse_mode='HTML'
      )
@@ -27,26 +27,26 @@ Then run: <code>python3 -c "from tri import load_sessions_from_file; load_sessio
      
      if session:
          text = f"""
-<b>👤 Session Control: {session_name}</b>
+<b>Session Control: {session_name}</b>
 
 <b>Status:</b> {session.status.upper()}
 <b>Phone:</b> {session.phone or 'Not set'}
 <b>Last Active:</b> {session.last_active.strftime('%Y-%m-%d %H:%M:%S')}
 
-<b>📊 Statistics:</b>
+<b>Statistics:</b>
 ├─ Messages Sent: {session.stats['messages_sent']:,}
 ├─ Groups Processed: {session.stats['groups_processed']:,}
 ├─ Errors: {session.stats['errors']:,}
 └─ Uptime: {datetime.now() - session.stats['start_time']}
 
-<b>⚙️ Settings:</b>
+<b>Settings:</b>
 ├─ Active: {'✅' if session.settings['active'] else '❌'}
 ├─ Auto Reply: {'✅' if session.settings['auto_reply'] else '❌'}
 ├─ Forward Messages: {'✅' if session.settings['forward_messages'] else '❌'}
 └─ Auto Profile: {'✅' if session.settings['change_profile'] else '❌'}
 """
      else:
-         text = f"<b>❌ Session {session_name} not found!</b>"
+         text = f"<b>Session {session_name} not found!</b>"
      
      await query.edit_message_text(
          text,
@@ -69,20 +69,20 @@ Then run: <code>python3 -c "from tri import load_sessions_from_file; load_sessio
          await save_sessions()
          
          await query.edit_message_text(
-             f"<b>🗑️ Session '{session_name}' deleted!</b>",
+             f"<b>Session '{session_name}' deleted!</b>",
              parse_mode='HTML'
          )
-         await broadcast_to_admins(f"🗑️ Session deleted: <b>{session_name}</b>")
+         await broadcast_to_admins(f"Session deleted: <b>{session_name}</b>")
      else:
          await query.edit_message_text(
-             f"<b>❌ Session '{session_name}' not found!</b>",
+             f"<b>Session '{session_name}' not found!</b>",
              parse_mode='HTML'
          )
  
  elif data.startswith("settings_"):
      session_name = data.split("_", 1)[1]
      await query.edit_message_text(
-         f"<b>⚙️ Settings for {session_name}</b>\nToggle options:",
+         f"<b>Settings for {session_name}</b>\nToggle options:",
          reply_markup=create_settings_keyboard(session_name),
          parse_mode='HTML'
      )
@@ -106,7 +106,7 @@ Then run: <code>python3 -c "from tri import load_sessions_from_file; load_sessio
          
          await save_sessions()
          await query.edit_message_text(
-             f"<b>✅ Setting updated for {session_name}</b>",
+             f"<b>Setting updated for {session_name}</b>",
              reply_markup=create_settings_keyboard(session_name),
              parse_mode='HTML'
          )
@@ -130,13 +130,13 @@ Then run: <code>python3 -c "from tri import load_sessions_from_file; load_sessio
      }
      
      await query.edit_message_text(
-         f"<b>✏️ Set {action.upper()} for {session_name}</b>\n\n{prompts.get(action, 'Send input:')}",
+         f"<b>Set {action.upper()} for {session_name}</b>\n\n{prompts.get(action, 'Send input:')}",
          parse_mode='HTML'
      )
  
  elif data == "bulk_actions":
      await query.edit_message_text(
-         "<b>🚀 Bulk Actions Control</b>\nSelect an action:",
+         "<b>Bulk Actions Control</b>\nSelect an action:",
          reply_markup=create_bulk_actions_keyboard(),
          parse_mode='HTML'
      )
@@ -169,7 +169,7 @@ Then run: <code>python3 -c "from tri import load_sessions_from_file; load_sessio
              msg = f"Stopped sessions {start_range}-{end_range}"
          
          await query.edit_message_text(
-             f"<b>✅ {msg}</b>\nAffected: {len(sessions_to_act)} sessions",
+             f"<b>{msg}</b>\nAffected: {len(sessions_to_act)} sessions",
              parse_mode='HTML'
          )
      
@@ -179,7 +179,7 @@ Then run: <code>python3 -c "from tri import load_sessions_from_file; load_sessio
              'pattern': 'session{number}'
          }
          await query.edit_message_text(
-             "<b>✏️ Batch Rename</b>\nSend new name pattern (use {number} for index):\nExample: account_{number}_vps",
+             "<b>Batch Rename</b>\nSend new name pattern (use {number} for index):\nExample: account_{number}_vps",
              parse_mode='HTML'
          )
      
@@ -188,7 +188,7 @@ Then run: <code>python3 -c "from tri import load_sessions_from_file; load_sessio
              'type': 'bulk_bio'
          }
          await query.edit_message_text(
-             "<b>📝 Set Bio for All Sessions</b>\nSend the bio text to apply to all sessions:",
+             "<b>Set Bio for All Sessions</b>\nSend the bio text to apply to all sessions:",
              parse_mode='HTML'
          )
  
@@ -198,7 +198,7 @@ Then run: <code>python3 -c "from tri import load_sessions_from_file; load_sessio
  elif data == "refresh_all":
      await refresh_all_sessions()
      await query.edit_message_text(
-         "<b>🔄 Refreshing all sessions...</b>",
+         "<b>Refreshing all sessions...</b>",
          parse_mode='HTML'
      )
  
@@ -206,7 +206,7 @@ Then run: <code>python3 -c "from tri import load_sessions_from_file; load_sessio
      session_name = data.split("_", 1)[1]
      await restart_session(session_name)
      await query.edit_message_text(
-         f"<b>🔄 Restarting {session_name}...</b>",
+         f"<b>Restarting {session_name}...</b>",
          parse_mode='HTML'
      )
  
@@ -214,7 +214,7 @@ Then run: <code>python3 -c "from tri import load_sessions_from_file; load_sessio
      session_name = data.split("_", 1)[1]
      await stop_session(session_name)
      await query.edit_message_text(
-         f"<b>⏹️ Stopped {session_name}</b>",
+         f"<b>Stopped {session_name}</b>",
          parse_mode='HTML'
      )
  
@@ -253,7 +253,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                  await apply_profile_changes(session)
              
              await update.message.reply_text(
-                 f"<b>✅ {input_type.upper()} updated for {session_name}</b>",
+                 f"<b>{input_type.upper()} updated for {session_name}</b>",
                  parse_mode='HTML'
              )
      
@@ -272,7 +272,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                      await apply_profile_changes(session)
                  
                  await update.message.reply_text(
-                     f"<b>✅ Profile photo updated for {session_name}</b>",
+                     f"<b>Profile photo updated for {session_name}</b>",
                      parse_mode='HTML'
                  )
      
@@ -289,7 +289,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
          
          await save_sessions()
          await update.message.reply_text(
-             f"<b>✅ Renamed all sessions</b>\nNew pattern: {pattern}",
+             f"<b>Renamed all sessions</b>\nNew pattern: {pattern}",
              parse_mode='HTML'
          )
      
@@ -303,7 +303,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
          
          await save_sessions()
          await update.message.reply_text(
-             f"<b>✅ Bio applied to all sessions</b>",
+             f"<b>Bio applied to all sessions</b>",
              parse_mode='HTML'
          )
      
@@ -336,14 +336,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
          ]])
          
          await update.message.reply_text(
-             f"<b>✅ Session '{session_name}' added via script format!</b>",
+             f"<b>Session '{session_name}' added via script format!</b>",
              reply_markup=keyboard,
              parse_mode='HTML'
          )
          
      except Exception as e:
          await update.message.reply_text(
-             f"<b>❌ Error adding session: {str(e)}</b>",
+             f"<b>Error adding session: {str(e)}</b>",
              parse_mode='HTML'
          )
 
@@ -399,7 +399,7 @@ async def handle_session_creation_bot(update: Update, context: ContextTypes.DEFA
      ]])
      
      await update.message.reply_text(
-         f"<b>✅ Session '{session_name}' added via BOT!</b>",
+         f"<b>Session '{session_name}' added via BOT!</b>",
          reply_markup=keyboard,
          parse_mode='HTML'
      )
@@ -418,7 +418,7 @@ async def start_session(session_name: str):
  state.active_tasks[session_name] = task
  session.status = "starting"
  
- await broadcast_to_admins(f"🚀 Starting session: <b>{session_name}</b>")
+ await broadcast_to_admins(f"Starting session: <b>{session_name}</b>")
 
 async def stop_session(session_name: str):
  """Stop a session"""
@@ -436,7 +436,7 @@ async def stop_session(session_name: str):
          except:
              pass
  
- await broadcast_to_admins(f"⏹️ Stopped session: <b>{session_name}</b>")
+ await broadcast_to_admins(f"Stopped session: <b>{session_name}</b>")
 
 async def restart_session(session_name: str):
  """Restart a session"""
@@ -493,7 +493,7 @@ async def run_session_worker(session: SessionInfo):
      
      if not await client.is_user_authorized():
          session.status = "unauthorized"
-         await broadcast_to_admins(f"❌ Session <b>{session.name}</b> not authorized")
+         await broadcast_to_admins(f"Session <b>{session.name}</b> not authorized")
          return
      
      # Get phone number
@@ -516,7 +516,7 @@ async def run_session_worker(session: SessionInfo):
                  except:
                      pass
      
-     await broadcast_to_admins(f"✅ Session <b>{session.name}</b> online ({me.phone or me.username})")
+     await broadcast_to_admins(f"Session <b>{session.name}</b> online ({me.phone or me.username})")
      
      # Main loop
      while session.settings['active'] and session.status == "online":
@@ -661,7 +661,7 @@ async def load_config():
 async def add_session_script_style():
  """Add sessions the old script way (for backward compatibility)"""
  print(f"\n{Fore.CYAN}{'='*50}")
- print(f"{Fore.GREEN}📝 ADD SESSIONS (SCRIPT STYLE)")
+ print(f"{Fore.GREEN}ADD SESSIONS (SCRIPT STYLE)")
  print(f"{Fore.CYAN}{'='*50}")
  
  try:
@@ -692,24 +692,24 @@ async def add_session_script_style():
              )
              
              state.sessions[session_name] = session_info
-             print(f"{Fore.GREEN}✅ Session {session_name} added!")
+             print(f"{Fore.GREEN}Session {session_name} added!")
              
          except ValueError:
              print(f"{Fore.RED}Invalid input for session {session_name}. Skipping...")
              continue
      
      await save_sessions()
-     print(f"\n{Fore.GREEN}✅ All sessions saved! Total: {len(state.sessions)}")
+     print(f"\n{Fore.GREEN}All sessions saved! Total: {len(state.sessions)}")
      
      # Ask to start sessions
      start_now = input(f"\n{Fore.YELLOW}Start all sessions now? (y/n): ").lower()
      if start_now == 'y':
-         print(f"{Fore.GREEN}🚀 Starting all sessions...")
+         print(f"{Fore.GREEN}Starting all sessions...")
          for session_name in state.sessions.keys():
              await start_session(session_name)
              await asyncio.sleep(1)  # Stagger starts
      
-     print(f"\n{Fore.GREEN}✅ Script-style session addition complete!")
+     print(f"\n{Fore.GREEN}Script-style session addition complete!")
      print(f"{Fore.YELLOW}You can now control sessions via the bot or script.")
      
  except (ValueError, KeyboardInterrupt):
@@ -757,7 +757,7 @@ def load_sessions_from_file(filename: str = "sessions.txt"):
      
      # Save to database
      asyncio.run(save_sessions())
-     print(f"{Fore.GREEN}✅ Loaded {added} sessions from file!")
+     print(f"{Fore.GREEN}Loaded {added} sessions from file!")
      
  except Exception as e:
      print(f"{Fore.RED}Error loading from file: {e}")
@@ -771,10 +771,10 @@ async def system_monitor():
          
          # Check for issues
          if sys_stats['cpu'] > 90:
-             await broadcast_to_admins(f"⚠️ <b>High CPU Usage:</b> {sys_stats['cpu']:.1f}%")
+             await broadcast_to_admins(f"High CPU Usage: {sys_stats['cpu']:.1f}%")
          
          if sys_stats['memory_used'] > 85:
-             await broadcast_to_admins(f"⚠️ <b>High Memory Usage:</b> {sys_stats['memory_used']:.1f}%")
+             await broadcast_to_admins(f"High Memory Usage: {sys_stats['memory_used']:.1f}%")
          
          # Update performance stats
          online_sessions = sum(1 for s in state.sessions.values() if s.status == "online")
@@ -793,7 +793,7 @@ async def system_monitor():
 # ====== MAIN FUNCTIONS ======
 async def initialize_bot():
  """Initialize Telegram bot"""
- print(f"{Fore.GREEN}🤖 Initializing Control Bot...")
+ print(f"{Fore.GREEN}Initializing Control Bot...")
  
  # Create application
  app = Application.builder().token(BotConfig.TOKEN).build()
@@ -820,11 +820,11 @@ async def initialize_bot():
  await app.start()
  await app.updater.start_polling()
  
- print(f"{Fore.GREEN}✅ Control Bot Ready!")
+ print(f"{Fore.GREEN}Control Bot Ready!")
  
  # Send startup message
  startup_msg = f"""
-<b>🚀 ORBIT ADBOT VPS ULTIMATE STARTED</b>
+<b>ORBIT ADBOT VPS ULTIMATE STARTED</b>
 
 <b>Server:</b> {os.uname().nodename}
 <b>Time:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -856,7 +856,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
      if update and update.effective_chat:
          await context.bot.send_message(
              chat_id=update.effective_chat.id,
-             text="❌ An error occurred. Please try again."
+             text="An error occurred. Please try again."
          )
  except:
      pass
@@ -864,22 +864,22 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def main():
  """Main function"""
  print(f"{Fore.CYAN}{'='*60}")
- print(f"{Fore.GREEN}🚀 ORBIT ADBOT - VPS ULTIMATE EDITION")
- print(f"{Fore.YELLOW}📱 BOT + SCRIPT COMBINATION")
+ print(f"{Fore.GREEN}ORBIT ADBOT - VPS ULTIMATE EDITION")
+ print(f"{Fore.YELLOW}BOT + SCRIPT COMBINATION")
  print(f"{Fore.CYAN}{'='*60}")
  
  # Load configuration
  await load_config()
  await load_sessions()
  
- print(f"{Fore.GREEN}📊 Loaded {len(state.sessions)} sessions")
+ print(f"{Fore.GREEN}Loaded {len(state.sessions)} sessions")
  
  # Show menu
  print(f"\n{Fore.CYAN}Select mode:")
- print(f"{Fore.GREEN}1. 🤖 Bot Mode (Control via Telegram)")
- print(f"{Fore.GREEN}2. 📝 Script Mode (Add sessions old way)")
- print(f"{Fore.GREEN}3. 🔄 Both (Run bot + add sessions)")
- print(f"{Fore.GREEN}4. 📁 Load from file (sessions.txt)")
+ print(f"{Fore.GREEN}1. Bot Mode (Control via Telegram)")
+ print(f"{Fore.GREEN}2. Script Mode (Add sessions old way)")
+ print(f"{Fore.GREEN}3. Both (Run bot + add sessions)")
+ print(f"{Fore.GREEN}4. Load from file (sessions.txt)")
  
  try:
      choice = input(f"\n{Fore.YELLOW}Enter choice (1-4): ").strip()
@@ -895,7 +895,7 @@ async def main():
      if choice == '4':
          # Load from file
          load_sessions_from_file()
-         print(f"{Fore.GREEN}✅ Sessions loaded! Starting bot...")
+         print(f"{Fore.GREEN}Sessions loaded! Starting bot...")
          bot_task = asyncio.create_task(initialize_bot())
      
      if choice not in ['1', '2', '3', '4']:
@@ -915,9 +915,9 @@ async def main():
              await asyncio.sleep(0.5)  # Stagger starts
      
      if auto_start_count > 0:
-         print(f"{Fore.GREEN}🚀 Auto-started {auto_start_count} sessions")
+         print(f"{Fore.GREEN}Auto-started {auto_start_count} sessions")
      
-     print(f"\n{Fore.GREEN}✅ System ready!")
+     print(f"\n{Fore.GREEN}System ready!")
      print(f"{Fore.YELLOW}Press Ctrl+C to stop")
      
      # Keep running
