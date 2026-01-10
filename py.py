@@ -9,6 +9,7 @@ import time
 import gc
 import psutil
 import traceback
+import weakref
 from telethon import TelegramClient, events, types
 from telethon.sessions import StringSession
 from telethon.errors import (
@@ -18,7 +19,7 @@ from telethon.errors import (
     ChatWriteForbiddenError,
     PeerIdInvalidError
 )
-from colorama import init, Fore
+from colorama import init, Fore, Style
 from datetime import datetime, timedelta
 import signal
 import sys
@@ -36,553 +37,556 @@ MIN_DELAY = 60   # 1 minute
 MAX_DELAY = 120  # 2 minutes
 CYCLE_DELAY = 1200  # 20 minutes
 MAX_RETRIES = 3
-MEMORY_CLEAN_INTERVAL = 100  # Clear memory every 100 operations
-HEARTBEAT_INTERVAL = 300  # Send heartbeat every 5 minutes
 
 # Performance Optimization
-MAX_CONCURRENT_TASKS = 3  # Limit concurrent operations to prevent overload
+MEMORY_CLEAN_INTERVAL = 50  # Clear memory every 50 operations
+HEARTBEAT_INTERVAL = 300  # Send heartbeat every 5 minutes
 BATCH_SIZE = 5  # Process groups in batches
+MAX_MEMORY_MB = 150  # Maximum allowed memory in MB
 
 # Enhanced logging
 logging.basicConfig(
     level=logging.WARNING,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('orbot_advanced.log'),
+        logging.FileHandler('orbot_operations.log'),
         logging.StreamHandler()
     ]
 )
 
 AUTO_REPLY_MESSAGE = "Dm @OgDigital For Buy"
 
-# Memory monitoring
-class MemoryMonitor:
-    def __init__(self, max_memory_mb=150):
-        self.max_memory_mb = max_memory_mb
+class MemoryOptimizer:
+    """Memory optimization and monitoring"""
+    
+    def __init__(self):
         self.process = psutil.Process(os.getpid())
+        self.session_refs = []  # Store session references
+        self.operation_counter = 0
+        self.last_cleanup = datetime.now()
         
-    def check_memory(self):
-        """Check current memory usage"""
-        memory_info = self.process.memory_info()
-        memory_mb = memory_info.rss / 1024 / 1024
-        return memory_mb
+    def get_memory_usage(self):
+        """Get current memory usage in MB"""
+        try:
+            return self.process.memory_info().rss / 1024 / 1024
+        except:
+            return 0
     
-    def is_memory_critical(self):
-        """Check if memory usage is critical"""
-        return self.check_memory() > self.max_memory_mb
+    def should_cleanup(self):
+        """Check if cleanup is needed"""
+        memory_usage = self.get_memory_usage()
+        
+        # Cleanup conditions
+        conditions = [
+            memory_usage > MAX_MEMORY_MB,
+            self.operation_counter >= MEMORY_CLEAN_INTERVAL,
+            (datetime.now() - self.last_cleanup).seconds > 600  # 10 minutes
+        ]
+        
+        return any(conditions)
     
-    def cleanup_memory(self):
-        """Force garbage collection and memory cleanup"""
+    def perform_cleanup(self, force=False):
+        """Perform memory cleanup"""
+        memory_before = self.get_memory_usage()
+        
+        # Count objects before cleanup
+        objects_before = len(gc.get_objects())
+        
+        # Force garbage collection
         gc.collect()
         
-        # Clear asyncio event loop callbacks if too many
-        try:
-            loop = asyncio.get_event_loop()
-            if len(loop._ready) > 1000:  # Too many pending callbacks
-                loop._ready.clear()
-            if len(loop._scheduled) > 1000:  # Too many scheduled tasks
-                loop._scheduled.clear()
-        except:
-            pass
+        # Clear session references
+        self.session_refs = [ref for ref in self.session_refs if ref() is not None]
+        
+        # Clear Python caches
+        sys.modules[__name__].__dict__.clear()
+        
+        memory_after = self.get_memory_usage()
+        objects_after = len(gc.get_objects())
+        
+        self.operation_counter = 0
+        self.last_cleanup = datetime.now()
+        
+        print(Fore.CYAN + f"🔄 Memory cleanup: {memory_before:.1f}MB → {memory_after:.1f}MB "
+              f"| Objects: {objects_before:,} → {objects_after:,}")
+        
+        return memory_after
+    
+    def register_session(self, session_object):
+        """Register a session for monitoring - FIXED VERSION"""
+        # Don't create weakrefs of weakrefs
+        if isinstance(session_object, weakref.ref):
+            return
             
-        return self.check_memory()
+        try:
+            # Create a weak reference to the session
+            ref = weakref.ref(session_object)
+            self.session_refs.append(ref)
+        except TypeError:
+            # If weakref fails, just store the ID
+            self.session_refs.append(id(session_object))
+    
+    def track_operation(self):
+        """Track an operation for cleanup scheduling"""
+        self.operation_counter += 1
 
-# Signal handler for graceful shutdown
-def signal_handler(signum, frame):
-    print(Fore.YELLOW + "\nReceived shutdown signal. Cleaning up...")
-    sys.exit(0)
-
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
+# Global memory optimizer
+memory_optimizer = MemoryOptimizer()
 
 def check_internet_connection(host="8.8.8.8", port=53, timeout=5):
-    """Enhanced internet connection check"""
+    """Check internet connection"""
     try:
         socket.create_connection((host, port), timeout=timeout)
         return True
     except (socket.error, OSError):
         return False
 
-async def robust_internet_check(max_attempts=10):
-    """Robust internet connection check with multiple attempts"""
-    for attempt in range(max_attempts):
+async def wait_for_internet(max_wait=300):
+    """Wait for internet connection"""
+    print(Fore.YELLOW + "🔌 Checking internet connection...")
+    start_time = time.time()
+    
+    while time.time() - start_time < max_wait:
         if check_internet_connection():
+            print(Fore.GREEN + "✅ Internet connected!")
             return True
-        print(Fore.YELLOW + f"Internet check attempt {attempt + 1}/{max_attempts} failed")
-        await asyncio.sleep(5)
+        print(Fore.YELLOW + "🌐 Waiting for internet...")
+        await asyncio.sleep(10)
+    
     return False
 
-async def safe_sleep(seconds, check_interval=30):
-    """Sleep with periodic internet checks and memory monitoring"""
-    memory_monitor = MemoryMonitor()
-    elapsed = 0
-    
-    while elapsed < seconds:
-        sleep_time = min(check_interval, seconds - elapsed)
-        await asyncio.sleep(sleep_time)
-        elapsed += sleep_time
-        
-        # Check memory every interval
-        if memory_monitor.is_memory_critical():
-            print(Fore.YELLOW + "High memory usage detected, cleaning...")
-            memory_monitor.cleanup_memory()
-
 def display_banner():
-    """Enhanced banner"""
+    """Display optimized banner"""
     print(Fore.GREEN + """
-     ██████╗ ██████╗ ██████╗ ██╗████████╗
-     ██╔═══██╗██╔══██╗██╔══██╗██║╚══██╔══╝
-     ██║   ██║██████╔╝██████╔╝██║   ██║   
-     ██║   ██║██╔══██╗██╔══██╗██║   ██║   
-     ╚██████╔╝██║  ██║██████╔╝██║   ██║   
-      ╚═════╝ ╚═╝  ╚═╝╚═════╝ ╚═╝   ╚═╝   
+    ╔══════════════════════════════════════╗
+    ║       ORBIT ADBOT - 24/7 EDITION     ║
+    ║      Advanced Memory Management      ║
+    ╚══════════════════════════════════════╝
     """)
-    print(Fore.GREEN + "ORBIT ADBOT - 24/7 Enterprise Edition")
-    print(Fore.GREEN + "=" * 40)
-    print(Fore.CYAN + "Features:")
-    print(Fore.CYAN + "• Memory Management & Auto-Cleanup")
-    print(Fore.CYAN + "• Crash Recovery & Auto-Restart")
+    print(Fore.CYAN + "📊 Features:")
+    print(Fore.CYAN + "• Smart Memory Optimization")
+    print(Fore.CYAN + "• Auto-Crash Recovery")
     print(Fore.CYAN + "• Connection Stability")
     print(Fore.CYAN + "• Resource Monitoring")
-    print(Fore.GREEN + "=" * 40 + "\n")
+    print(Fore.GREEN + "=" * 40)
+    print(Fore.YELLOW + f"⏰ Delays: {MIN_DELAY//60}-{MAX_DELAY//60} min | Cycle: {CYCLE_DELAY//60} min")
+    print(Fore.YELLOW + f"💾 Memory Limit: {MAX_MEMORY_MB}MB | Cleanup every: {MEMORY_CLEAN_INTERVAL} ops")
+    print()
 
-class SessionManager:
-    """Enhanced session management with memory optimization"""
-    
-    def __init__(self, session_name, credentials):
-        self.session_name = session_name
-        self.credentials = credentials
-        self.client = None
-        self.operation_count = 0
-        self.last_heartbeat = datetime.now()
-        self.memory_monitor = MemoryMonitor()
-        self.session_start = datetime.now()
-        
-    async def initialize_client(self):
-        """Initialize Telegram client with retry logic"""
-        for attempt in range(MAX_RETRIES):
-            try:
-                print(Fore.YELLOW + f"[{self.session_name}] Initializing client (Attempt {attempt + 1})...")
-                
-                self.client = TelegramClient(
-                    StringSession(self.credentials["string_session"]),
-                    self.credentials["api_id"],
-                    self.credentials["api_hash"],
-                    device_model="Android",
-                    system_version="10",
-                    app_version="8.4",
-                    lang_code="en",
-                    system_lang_code="en-US",
-                    connection_retries=5,
-                    retry_delay=3,
-                    timeout=30,
-                    auto_reconnect=True
-                )
-                
-                # Set download and upload workers to reduce memory
-                self.client.session.set_dc(2, '149.154.167.40', 443)
-                
-                await self.client.connect()
-                
-                if not await self.client.is_user_authorized():
-                    print(Fore.RED + f"[{self.session_name}] Not authorized")
-                    return False
-                    
-                print(Fore.GREEN + f"[{self.session_name}] Client initialized successfully")
-                return True
-                
-            except Exception as e:
-                print(Fore.RED + f"[{self.session_name}] Init attempt {attempt + 1} failed: {str(e)}")
-                if attempt < MAX_RETRIES - 1:
-                    await asyncio.sleep(10 ** attempt)  # Exponential backoff
-                    
-        return False
-    
-    async def send_heartbeat(self):
-        """Send heartbeat to check connection"""
-        try:
-            if self.client and self.client.is_connected():
-                await self.client.get_me()
-                self.last_heartbeat = datetime.now()
-                return True
-        except Exception:
-            return False
-        return False
-    
-    async def safe_operation(self, coro, operation_name="operation"):
-        """Execute operation with error handling and memory management"""
-        try:
-            # Check memory before operation
-            if self.memory_monitor.is_memory_critical():
-                print(Fore.YELLOW + f"[{self.session_name}] Memory critical before {operation_name}, cleaning...")
-                self.memory_monitor.cleanup_memory()
-            
-            result = await coro
-            
-            # Increment operation counter
-            self.operation_count += 1
-            
-            # Clean memory periodically
-            if self.operation_count % MEMORY_CLEAN_INTERVAL == 0:
-                print(Fore.BLUE + f"[{self.session_name}] Performing periodic memory cleanup...")
-                mem_after = self.memory_monitor.cleanup_memory()
-                print(Fore.BLUE + f"[{self.session_name}] Memory after cleanup: {mem_after:.1f} MB")
-            
-            # Send heartbeat periodically
-            if (datetime.now() - self.last_heartbeat).total_seconds() > HEARTBEAT_INTERVAL:
-                if await self.send_heartbeat():
-                    print(Fore.GREEN + f"[{self.session_name}] Heartbeat sent")
-            
-            return result
-            
-        except Exception as e:
-            print(Fore.RED + f"[{self.session_name}] Error in {operation_name}: {str(e)}")
-            raise
-    
-    async def cleanup(self):
-        """Cleanup resources"""
-        try:
-            if self.client:
-                await self.client.disconnect()
-                self.client = None
-        except:
-            pass
-        
-        # Force garbage collection
-        gc.collect()
+def save_session(session_name, data):
+    """Save session data"""
+    try:
+        path = os.path.join(CREDENTIALS_FOLDER, f"{session_name}.json")
+        with open(path, 'w') as f:
+            json.dump(data, f, indent=2)
+        print(Fore.GREEN + f"💾 Saved session: {session_name}")
+    except Exception as e:
+        print(Fore.RED + f"❌ Failed to save session: {e}")
 
-async def process_groups_batch(session_manager, groups, message):
-    """Process groups in batches to reduce memory pressure"""
-    processed = 0
-    failed = 0
-    
-    for i in range(0, len(groups), BATCH_SIZE):
-        batch = groups[i:i + BATCH_SIZE]
-        batch_tasks = []
-        
-        for group in batch:
-            task = session_manager.safe_operation(
-                safe_forward(session_manager.client, group, message, session_manager.session_name),
-                f"forward to {getattr(group, 'title', 'group')}"
-            )
-            batch_tasks.append(task)
-        
-        # Execute batch with limited concurrency
-        results = await asyncio.gather(*batch_tasks, return_exceptions=True)
-        
-        for result in results:
-            if isinstance(result, Exception):
-                failed += 1
-            elif result is True:
-                processed += 1
-        
-        # Delay between batches
-        if i + BATCH_SIZE < len(groups):
-            delay = random.uniform(MIN_DELAY/2, MAX_DELAY/2)  # Smaller delay between batches
-            print(Fore.BLUE + f"[{session_manager.session_name}] Batch complete. Next batch in {delay/60:.1f} min")
-            await safe_sleep(delay)
-    
-    return processed, failed
+def load_session(session_name):
+    """Load session data"""
+    try:
+        path = os.path.join(CREDENTIALS_FOLDER, f"{session_name}.json")
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        print(Fore.RED + f"❌ Failed to load session: {e}")
+    return None
+
+async def get_last_message(client):
+    """Get last message with error handling"""
+    try:
+        entity = await client.get_input_entity(TARGET_USER)
+        messages = await client.get_messages(entity, limit=1)
+        return messages[0] if messages else None
+    except Exception as e:
+        print(Fore.RED + f"❌ Error getting message: {e}")
+        return None
 
 async def safe_forward(client, group, message, session_name):
-    """Safe message forwarding with flood control"""
+    """Safe message forwarding"""
     try:
-        # Check if we can send messages
-        try:
-            chat = await client.get_entity(group)
-            if hasattr(chat, 'default_banned_rights') and chat.default_banned_rights.send_messages:
-                print(Fore.YELLOW + f"[{session_name}] Cannot send messages to {getattr(chat, 'title', 'group')}")
-                return False
-        except:
-            pass
+        # Quick memory check
+        if memory_optimizer.should_cleanup():
+            memory_optimizer.perform_cleanup()
         
         await client.forward_messages(group, message)
-        print(Fore.GREEN + f"[{session_name}] Sent to {getattr(group, 'title', 'GROUP')}")
+        print(Fore.GREEN + f"[{session_name}] ✅ Sent to {getattr(group, 'title', 'GROUP')}")
+        memory_optimizer.track_operation()
         return True
-        
     except FloodWaitError as e:
-        print(Fore.YELLOW + f"[{session_name}] Flood wait: {e.seconds} seconds")
-        await safe_sleep(e.seconds + 5)
+        wait_time = e.seconds
+        print(Fore.YELLOW + f"[{session_name}] ⏳ Flood wait: {wait_time}s")
+        await asyncio.sleep(wait_time + 5)
         return False
     except (ChannelPrivateError, ChatWriteForbiddenError):
-        print(Fore.YELLOW + f"[{session_name}] No access to group")
-        return False
-    except PeerIdInvalidError:
-        print(Fore.YELLOW + f"[{session_name}] Invalid group ID")
+        print(Fore.YELLOW + f"[{session_name}] 🔒 No access")
         return False
     except Exception as e:
         error_type = type(e).__name__
-        if "Too Many Requests" in str(e) or "FLOOD" in str(e).upper():
-            print(Fore.YELLOW + f"[{session_name}] Rate limited, backing off...")
-            await safe_sleep(random.uniform(30, 60))
-        else:
-            print(Fore.RED + f"[{session_name}] Forward error: {error_type}")
+        print(Fore.RED + f"[{session_name}] ❌ Error: {error_type}")
         return False
 
-async def main_session_loop(session_manager):
-    """Main loop for a single session with enhanced reliability"""
+async def process_groups_optimized(client, session_name, message):
+    """Optimized group processing with memory management"""
+    if not message:
+        print(Fore.YELLOW + f"[{session_name}] ⚠️ No message to forward")
+        return 0, 0
     
-    print(Fore.CYAN + f"[{session_manager.session_name}] Starting main loop...")
+    groups = []
+    try:
+        # Limit groups to reduce memory
+        async for dialog in client.iter_dialogs(limit=100):
+            if dialog.is_group:
+                groups.append(dialog.entity)
+                
+                # Check memory periodically while fetching
+                if len(groups) % 20 == 0 and memory_optimizer.should_cleanup():
+                    memory_optimizer.perform_cleanup()
+    except Exception as e:
+        print(Fore.RED + f"[{session_name}] ❌ Error getting groups: {e}")
+        return 0, 0
     
-    while True:
+    if not groups:
+        print(Fore.YELLOW + f"[{session_name}] ⚠️ No groups found")
+        return 0, 0
+    
+    total = len(groups)
+    print(Fore.CYAN + f"[{session_name}] 📊 Processing {total} groups")
+    
+    processed = 0
+    failed = 0
+    
+    # Process in batches
+    for i in range(0, total, BATCH_SIZE):
+        batch = groups[i:i + BATCH_SIZE]
+        
+        for group in batch:
+            success = await safe_forward(client, group, message, session_name)
+            if success:
+                processed += 1
+            else:
+                failed += 1
+            
+            # Random delay between sends
+            delay = random.uniform(MIN_DELAY, MAX_DELAY)
+            if i + 1 < total:  # Not the last one
+                minutes = delay / 60
+                print(Fore.BLUE + f"[{session_name}] ⏰ Next in {minutes:.1f} min")
+                await asyncio.sleep(delay)
+        
+        # Memory cleanup after each batch
+        if memory_optimizer.should_cleanup():
+            memory_optimizer.perform_cleanup()
+    
+    print(Fore.CYAN + f"[{session_name}] 📈 Summary: {processed}/{total} sent | {failed} failed")
+    return processed, failed
+
+async def setup_auto_reply(client, session_name):
+    """Setup auto-reply handler"""
+    @client.on(events.NewMessage(incoming=True))
+    async def handler(event):
+        if event.is_private:
+            try:
+                await event.reply(AUTO_REPLY_MESSAGE)
+                print(Fore.MAGENTA + f"[{session_name}] 🤖 Auto-replied")
+            except Exception:
+                pass
+
+async def manage_session_optimized(session_name, credentials):
+    """Optimized session management with memory fixes"""
+    session_start = datetime.now()
+    retry_count = 0
+    
+    while retry_count < MAX_RETRIES:
+        client = None
         try:
-            # Ensure internet connection
-            if not await robust_internet_check():
-                print(Fore.RED + f"[{session_manager.session_name}] No internet, waiting...")
-                await safe_sleep(30)
-                continue
+            print(Fore.CYAN + f"[{session_name}] 🚀 Starting session...")
             
-            # Reinitialize client if needed
-            if not session_manager.client or not session_manager.client.is_connected():
-                if not await session_manager.initialize_client():
-                    print(Fore.RED + f"[{session_manager.session_name}] Failed to initialize, waiting...")
-                    await safe_sleep(60)
-                    continue
+            # Wait for internet
+            if not await wait_for_internet():
+                print(Fore.RED + f"[{session_name}] ❌ No internet, skipping...")
+                break
             
-            # Setup auto-reply
-            @session_manager.client.on(events.NewMessage(incoming=True))
-            async def handler(event):
-                if event.is_private:
-                    try:
-                        await event.reply(AUTO_REPLY_MESSAGE)
-                        print(Fore.MAGENTA + f"[{session_manager.session_name}] Auto-replied to DM")
-                    except Exception:
-                        pass
-            
-            # Get message to forward
-            message = await session_manager.safe_operation(
-                get_last_message(session_manager.client),
-                "get last message"
+            # Create client with optimized settings
+            client = TelegramClient(
+                StringSession(credentials["string_session"]),
+                credentials["api_id"],
+                credentials["api_hash"],
+                device_model="Android",
+                system_version="10",
+                app_version="8.4",
+                lang_code="en",
+                system_lang_code="en-US",
+                connection_retries=3,
+                retry_delay=2,
+                timeout=20
             )
             
-            if not message:
-                print(Fore.YELLOW + f"[{session_manager.session_name}] No message found")
-                await safe_sleep(60)
-                continue
+            print(Fore.YELLOW + f"[{session_name}] 🔗 Connecting...")
+            await client.connect()
             
-            # Get groups
-            groups = []
-            try:
-                async for dialog in session_manager.client.iter_dialogs(limit=200):  # Limit to reduce memory
-                    if dialog.is_group:
-                        groups.append(dialog.entity)
-            except Exception as e:
-                print(Fore.RED + f"[{session_manager.session_name}] Error getting groups: {str(e)}")
-                await safe_sleep(30)
-                continue
+            if not await client.is_user_authorized():
+                print(Fore.RED + f"[{session_name}] ❌ Not authorized")
+                break
             
-            if not groups:
-                print(Fore.YELLOW + f"[{session_manager.session_name}] No groups found")
-                await safe_sleep(CYCLE_DELAY)
-                continue
+            print(Fore.GREEN + f"[{session_name}] ✅ Connected!")
             
-            print(Fore.CYAN + f"[{session_manager.session_name}] Processing {len(groups)} groups")
+            # Register session for memory monitoring (FIXED)
+            memory_optimizer.register_session(client)
             
-            # Process groups in batches
-            processed, failed = await process_groups_batch(session_manager, groups, message)
+            # Setup auto-reply
+            await setup_auto_reply(client, session_name)
             
-            print(Fore.CYAN + f"[{session_manager.session_name}] Batch completed: {processed} sent, {failed} failed")
+            # Reset retry count on successful connection
+            retry_count = 0
             
-            # Cycle delay with progress indicator
-            print(Fore.YELLOW + f"[{session_manager.session_name}] Cycle complete. Next cycle in {CYCLE_DELAY//60} minutes")
+            # Main operation loop
+            while True:
+                try:
+                    # Check internet
+                    if not check_internet_connection():
+                        print(Fore.YELLOW + f"[{session_name}] 🌐 Internet lost, reconnecting...")
+                        await client.disconnect()
+                        await asyncio.sleep(10)
+                        await client.connect()
+                    
+                    # Get message
+                    message = await get_last_message(client)
+                    
+                    # Process groups
+                    processed, failed = await process_groups_optimized(client, session_name, message)
+                    
+                    if processed == 0 and failed == 0:
+                        print(Fore.YELLOW + f"[{session_name}] ⏸️ No operations, sleeping...")
+                        await asyncio.sleep(60)
+                        continue
+                    
+                    # Cycle completion
+                    minutes = CYCLE_DELAY / 60
+                    print(Fore.YELLOW + f"[{session_name}] ♻️ Cycle complete. Next in {minutes:.1f} min")
+                    
+                    # Sleep with progress updates
+                    remaining = CYCLE_DELAY
+                    while remaining > 0:
+                        sleep_time = min(60, remaining)
+                        await asyncio.sleep(sleep_time)
+                        remaining -= sleep_time
+                        
+                        # Memory check during sleep
+                        if memory_optimizer.should_cleanup():
+                            memory_optimizer.perform_cleanup()
+                        
+                        if remaining > 0:
+                            mins_left = remaining // 60
+                            secs_left = remaining % 60
+                            print(Fore.BLUE + f"[{session_name}] ⏳ Next cycle in: {mins_left:02d}:{secs_left:02d}")
+                    
+                except UserDeactivatedBanError:
+                    print(Fore.RED + f"[{session_name}] 🚫 Account banned")
+                    break
+                except Exception as e:
+                    print(Fore.RED + f"[{session_name}] ❌ Operation error: {type(e).__name__}")
+                    break
             
-            # Sleep with progress updates
-            remaining = CYCLE_DELAY
-            while remaining > 0:
-                sleep_time = min(60, remaining)  # Update every minute
-                await safe_sleep(sleep_time)
-                remaining -= sleep_time
-                
-                if remaining > 0:
-                    hours = remaining // 3600
-                    minutes = (remaining % 3600) // 60
-                    print(Fore.BLUE + f"[{session_manager.session_name}] Next cycle in: {hours:02d}:{minutes:02d}")
-            
-            # Force cleanup after each cycle
-            gc.collect()
-            
-        except UserDeactivatedBanError:
-            print(Fore.RED + f"[{session_manager.session_name}] Account banned. Stopping.")
-            break
-        except KeyboardInterrupt:
-            print(Fore.YELLOW + f"[{session_manager.session_name}] Stopped by user")
-            break
         except Exception as e:
-            print(Fore.RED + f"[{session_manager.session_name}] Critical error: {str(e)}")
-            traceback.print_exc()
+            retry_count += 1
+            error_msg = str(e)[:100]  # Truncate long error messages
+            print(Fore.RED + f"[{session_name}] ❌ Error: {type(e).__name__} - {error_msg}")
             
-            # Cleanup before retry
-            await session_manager.cleanup()
+            if retry_count < MAX_RETRIES:
+                wait_time = 30 * retry_count
+                print(Fore.YELLOW + f"[{session_name}] 🔄 Retrying in {wait_time} seconds...")
+                await asyncio.sleep(wait_time)
+        
+        finally:
+            # Cleanup client
+            if client:
+                try:
+                    await client.disconnect()
+                    print(Fore.YELLOW + f"[{session_name}] 🔌 Disconnected")
+                except:
+                    pass
             
-            # Exponential backoff
-            backoff_time = min(300, 30 * (session_manager.operation_count % 10))
-            print(Fore.YELLOW + f"[{session_manager.session_name}] Backing off for {backoff_time} seconds...")
-            await safe_sleep(backoff_time)
+            # Force memory cleanup
+            memory_optimizer.perform_cleanup()
+    
+    # Session ended
+    session_duration = datetime.now() - session_start
+    hours = session_duration.seconds // 3600
+    minutes = (session_duration.seconds % 3600) // 60
+    print(Fore.CYAN + f"[{session_name}] 🏁 Session ended after {hours}h {minutes}m")
 
-async def main():
-    """Main function with session management"""
+async def memory_watchdog():
+    """Background task to monitor and optimize memory"""
+    while True:
+        await asyncio.sleep(60)  # Check every minute
+        
+        memory_usage = memory_optimizer.get_memory_usage()
+        
+        if memory_optimizer.should_cleanup():
+            print(Fore.YELLOW + f"🦮 Memory watchdog: {memory_usage:.1f}MB - Cleaning...")
+            memory_optimizer.perform_cleanup()
+        
+        # Log memory status every 5 minutes
+        if int(time.time()) % 300 < 60:  # Every 5 minutes
+            print(Fore.CYAN + f"📊 System memory: {memory_usage:.1f}MB | "
+                  f"Operations: {memory_optimizer.operation_counter}")
+
+async def main_optimized():
+    """Main function with enhanced management"""
     display_banner()
     
-    # Check system resources
-    memory_monitor = MemoryMonitor()
-    initial_memory = memory_monitor.check_memory()
-    print(Fore.CYAN + f"Initial memory usage: {initial_memory:.1f} MB")
+    # Initial memory check
+    initial_memory = memory_optimizer.get_memory_usage()
+    print(Fore.CYAN + f"📈 Initial memory: {initial_memory:.1f}MB")
     
-    # Check internet
-    if not await robust_internet_check():
-        print(Fore.RED + "No internet connection. Exiting.")
-        return
+    # Start memory watchdog
+    watchdog_task = asyncio.create_task(memory_watchdog())
     
     try:
         # Load sessions
         num_sessions = int(input("Enter number of sessions: "))
         if num_sessions < 1:
-            raise ValueError("At least 1 session required")
+            print(Fore.RED + "❌ At least 1 session required")
+            return
         
-        session_managers = []
+        tasks = []
         
         for i in range(1, num_sessions + 1):
             session_name = f"session{i}"
             creds = load_session(session_name)
             
             if not creds:
-                print(Fore.CYAN + f"\nConfiguring {session_name}:")
-                creds = {
-                    "api_id": int(input("API ID: ")),
-                    "api_hash": input("API Hash: "),
-                    "string_session": input("String Session: ")
-                }
-                save_session(session_name, creds)
+                print(Fore.CYAN + f"\n📝 Configuring {session_name}:")
+                try:
+                    creds = {
+                        "api_id": int(input("API ID: ")),
+                        "api_hash": input("API Hash: "),
+                        "string_session": input("String Session: ")
+                    }
+                    save_session(session_name, creds)
+                except ValueError:
+                    print(Fore.RED + "❌ Invalid API ID")
+                    continue
             
-            manager = SessionManager(session_name, creds)
-            session_managers.append(manager)
-        
-        # Run sessions with staggered start
-        print(Fore.GREEN + f"\nStarting {len(session_managers)} sessions...")
-        
-        tasks = []
-        for i, manager in enumerate(session_managers):
-            # Stagger start to avoid simultaneous connections
-            if i > 0:
-                await asyncio.sleep(random.uniform(5, 15))
+            # Stagger session starts
+            if i > 1:
+                stagger = random.uniform(5, 15)
+                print(Fore.BLUE + f"⏱️ Staggering {session_name} by {stagger:.1f}s")
+                await asyncio.sleep(stagger)
             
-            task = asyncio.create_task(main_session_loop(manager))
-            task.set_name(f"Session-{manager.session_name}")
+            task = asyncio.create_task(
+                manage_session_optimized(session_name, creds)
+            )
             tasks.append(task)
         
-        # Monitor tasks
-        while True:
-            await asyncio.sleep(60)
-            
-            # Check memory periodically
-            current_memory = memory_monitor.check_memory()
-            if current_memory > 200:  # If over 200MB
-                print(Fore.YELLOW + f"High system memory: {current_memory:.1f} MB")
-                memory_monitor.cleanup_memory()
-            
-            # Log status
-            active_tasks = sum(1 for t in tasks if not t.done())
-            print(Fore.CYAN + f"Active sessions: {active_tasks}/{len(tasks)} | Memory: {current_memory:.1f} MB")
-            
+        print(Fore.GREEN + f"\n🚀 Starting {len(tasks)} sessions...")
+        
+        # Wait for all tasks
+        await asyncio.gather(*tasks, return_exceptions=True)
+        
     except KeyboardInterrupt:
-        print(Fore.YELLOW + "\nShutting down gracefully...")
+        print(Fore.YELLOW + "\n⏹️ Stopped by user")
     except Exception as e:
-        print(Fore.RED + f"Fatal error: {str(e)}")
+        print(Fore.RED + f"💥 Fatal error: {type(e).__name__}")
         traceback.print_exc()
     finally:
-        # Cleanup all sessions
-        print(Fore.YELLOW + "Cleaning up resources...")
-        for manager in session_managers:
-            await manager.cleanup()
+        # Cancel watchdog
+        watchdog_task.cancel()
+        try:
+            await watchdog_task
+        except asyncio.CancelledError:
+            pass
         
-        # Final memory cleanup
-        gc.collect()
-        print(Fore.GREEN + "Cleanup complete.")
+        # Final cleanup
+        print(Fore.YELLOW + "🧹 Final memory cleanup...")
+        memory_optimizer.perform_cleanup()
+        
+        final_memory = memory_optimizer.get_memory_usage()
+        print(Fore.GREEN + f"✅ Cleanup complete. Final memory: {final_memory:.1f}MB")
 
-# Helper functions (keep from original)
-def save_session(session_name, data):
-    try:
-        path = os.path.join(CREDENTIALS_FOLDER, f"{session_name}.json")
-        with open(path, 'w') as f:
-            json.dump(data, f, indent=2)
-    except Exception:
-        pass
-
-def load_session(session_name):
-    try:
-        path = os.path.join(CREDENTIALS_FOLDER, f"{session_name}.json")
-        if os.path.exists(path):
-            with open(path, 'r') as f:
-                return json.load(f)
-    except Exception:
-        pass
-    return None
-
-async def get_last_message(client):
-    try:
-        entity = await client.get_input_entity(TARGET_USER)
-        messages = await client.get_messages(entity, limit=1)
-        return messages[0] if messages else None
-    except Exception:
-        return None
-
-class ApplicationMonitor:
-    """Application level monitoring and restart"""
+class RestartManager:
+    """Manage application restarts"""
     
-    def __init__(self):
-        self.start_time = datetime.now()
+    def __init__(self, max_restarts=10):
+        self.max_restarts = max_restarts
         self.restart_count = 0
-        self.max_restarts = 20
-        self.last_restart = datetime.now()
+        self.last_restart = time.time()
     
-    def should_restart(self):
-        """Check if application should restart"""
-        # Don't restart too frequently
-        if (datetime.now() - self.last_restart).total_seconds() < 60:
+    def can_restart(self):
+        """Check if restart is allowed"""
+        if self.restart_count >= self.max_restarts:
             return False
         
-        # Limit total restarts
-        if self.restart_count >= self.max_restarts:
+        # Don't restart too frequently
+        if time.time() - self.last_restart < 30:
             return False
         
         return True
     
     def record_restart(self):
-        """Record restart attempt"""
+        """Record a restart"""
         self.restart_count += 1
-        self.last_restart = datetime.now()
+        self.last_restart = time.time()
         
-        # Write restart log
-        with open('restart_log.txt', 'a') as f:
-            f.write(f"{datetime.now()} - Restart {self.restart_count}\n")
+        # Log restart
+        with open('restart_history.log', 'a') as f:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f"{timestamp} - Restart #{self.restart_count}\n")
+        
+        print(Fore.YELLOW + f"🔄 Restart #{self.restart_count}")
+
+def signal_handler(signum, frame):
+    """Handle termination signals"""
+    print(Fore.YELLOW + f"\n✋ Received signal {signum}, shutting down gracefully...")
+    sys.exit(0)
 
 if __name__ == "__main__":
-    monitor = ApplicationMonitor()
+    # Setup signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
     
-    while monitor.should_restart():
+    restart_manager = RestartManager()
+    
+    # Main restart loop
+    while restart_manager.can_restart():
         try:
-            print(Fore.GREEN + f"\n{'='*50}")
-            print(Fore.GREEN + f"ORBIT ADBOT - Starting (Attempt {monitor.restart_count + 1})")
-            print(Fore.GREEN + f"{'='*50}\n")
+            print(Fore.GREEN + "\n" + "="*50)
+            print(Fore.GREEN + "       ORBIT ADBOT - 24/7 ENTERPRISE")
+            print(Fore.GREEN + "="*50 + "\n")
             
-            asyncio.run(main())
+            asyncio.run(main_optimized())
             
             # Normal exit
-            print(Fore.GREEN + "Application finished normally")
+            print(Fore.GREEN + "🎉 Application finished normally")
             break
             
         except KeyboardInterrupt:
-            print(Fore.YELLOW + "\nApplication stopped by user")
+            print(Fore.YELLOW + "\n👋 User interrupted")
+            break
+        except SystemExit:
+            print(Fore.YELLOW + "\n🛑 System exit requested")
             break
         except Exception as e:
-            monitor.record_restart()
-            print(Fore.RED + f"\nApplication crashed: {type(e).__name__}")
-            traceback.print_exc()
+            restart_manager.record_restart()
+            
+            print(Fore.RED + f"\n💥 Crash detected: {type(e).__name__}")
+            
+            # Clean traceback to avoid memory issues
+            try:
+                tb = traceback.format_exc()
+                error_lines = tb.split('\n')[-5:]  # Last 5 lines
+                print(Fore.RED + '\n'.join(error_lines))
+            except:
+                pass
             
             # Wait before restarting
-            wait_time = min(300, 30 * monitor.restart_count)
-            print(Fore.YELLOW + f"Restarting in {wait_time} seconds...")
+            wait_time = min(300, 30 * restart_manager.restart_count)
+            print(Fore.YELLOW + f"⏳ Waiting {wait_time}s before restart...")
             time.sleep(wait_time)
     
-    if monitor.restart_count >= monitor.max_restarts:
-        print(Fore.RED + "Maximum restart attempts reached. Please check your configuration.")
+    if restart_manager.restart_count >= restart_manager.max_restarts:
+        print(Fore.RED + f"\n🚫 Maximum restarts reached ({restart_manager.max_restarts})")
+        print(Fore.RED + "Please check your configuration and restart manually.")
