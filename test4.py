@@ -29,7 +29,7 @@ TARGET_USER = "Orgjhonysins"
 MIN_DELAY = 60
 MAX_DELAY = 120
 CYCLE_DELAY = 1800
-MAX_CONCURRENT = 15
+MAX_CONCURRENT = 30
 
 # Set up logging
 logging.basicConfig(
