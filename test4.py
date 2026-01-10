@@ -23,13 +23,13 @@ init(autoreset=True)
 # Configuration
 CREDENTIALS_FOLDER = 'sessions'
 os.makedirs(CREDENTIALS_FOLDER, exist_ok=True)
-TARGET_USER = "OgDigital"
+TARGET_USER = "Orgjhonysins"
 
 # Timing Settings
-MIN_DELAY = 15
-MAX_DELAY = 30
-CYCLE_DELAY = 900
-MAX_CONCURRENT = 10
+MIN_DELAY = 60
+MAX_DELAY = 120
+CYCLE_DELAY = 1800
+MAX_CONCURRENT = 15
 
 # Set up logging
 logging.basicConfig(
