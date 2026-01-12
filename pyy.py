@@ -24,7 +24,7 @@ init(autoreset=True)
 # Configuration - Optimized for Termux
 CREDENTIALS_FOLDER = 'tdata'
 os.makedirs(CREDENTIALS_FOLDER, exist_ok=True)
-TARGET_USER = "Ogdigital"  # Target username for DM forwarding
+TARGET_USER = "Orgjhonysins"  # Target username for DM forwarding
 
 # Proxy Configuration - Fixed format for Telethon
 PROXY_CONFIG = {
