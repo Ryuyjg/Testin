@@ -1,0 +1,599 @@
+import time
+import asyncio
+from telethon import TelegramClient
+from telethon.sessions import StringSession
+from telethon.tl.functions.channels import JoinChannelRequest
+from telethon.errors import FloodWaitError, UserAlreadyParticipantError, ChannelPrivateError, FloodError
+
+# =========================
+# INPUT SESSIONS
+# =========================
+num_sessions = int(input("How many sessions do you want to add? "))
+
+sessions = []
+for i in range(num_sessions):
+    print(f"\n=== Session {i+1} ===")
+    api_id = int(input("Enter API ID: "))
+    api_hash = input("Enter API Hash: ")
+    string_session = input("Enter String Session: ")
+
+    sessions.append({
+        "api_id": api_id,
+        "api_hash": api_hash,
+        "string_session": string_session,
+        "name": f"session{i+1}",
+        "group_start": i * 5
+    })
+
+print(f"\n✅ {len(sessions)} sessions configured")
+print(f"Each session will join DIFFERENT groups (5 groups per session)\n")
+
+# =========================
+# GROUPS LIST (Extracted from the provided URLs)
+# =========================
+groups = [
+    # Extracted from the URLs
+    "@giftfest_chat", "@iris_cm_chat", "@apk_hack_android", "@NFT_Chatix", "@moscowtinder2",
+    "@chatikdf7", "@TonTakeGarant", "@BloxFruitsTradeRbxl", "@durka_public_chat", "@mylove_chat1",
+    "@nayticc0", "@kavkazmoskve", "@gruppacxg", "@nft_chatp", "@chatiks_znakomstv",
+    "@PR_FREEEE", "@Chatikc_nft", "@rabota_vakansii_krasnodar_chat", "@Internationals_english_russian",
+    "@imvlg", "@BESEDA81", "@vvzakun", "@neBlackGroup", "@syndicate_garant",
+    "@prodazapokupkanftitd", "@SafeBaseList", "@centerekb_chat", "@soloromashki", "@fefelova_anastasi",
+    "@chatikz13", "@grammfispeckta", "@a_nas_to_zashoo", "@dpsMGN774", "@pattaiachat_ask",
+    "@geasspapasha", "@Reklama_Uslugi_Vakansii", "@birzha_reklamy2", "@landyshi2ss", "@shat37",
+    "@BIZNES_GQ", "@Sladkiy_Chat07", "@konditer1", "@windy31chatroom", "@vape_rfka",
+    "@baraholkamariupol", "@luganskreklama", "@piartelega", "@obmen_v_Dubaii", "@biznes_obsu",
+    "@exchangeworld77", "@prodazhaobmenbrawlstars", "@hainan_kitaj", "@permdps_159", "@iris_feedback",
+    "@reclama_room", "@Skam_Chat", "@piarimchatim", "@JetourclubRussia", "@hrmskmo",
+    "@DmaxnoVostiChat", "@ObmenCryptoRussia", "@blacklist_cashback", "@vzaimnovtelegram",
+    "@SPAMPIAR", "@stalcrafttrade", "@NFT_Chatez", "@catalogpiarr", "@leannft",
+    "@nighttradechat", "@AllArchives6", "@knuklescrypto", "@nft_chattik", "@Pr_khers_obl2025",
+    "@naytiby", "@ekaterinburg_uslugi", "@DHRUZBEKLAR", "@piarchattg", "@reklam_birzha",
+    "@P1Rchats", "@besplatnyipiar", "@Razdacha_telegram_Premuy", "@RMNbuildspb", "@garantferz",
+    "@virt_chat00", "@birzha_chat69", "@reklama_ru_vip", "@voskresenskbaraholka", "@Homutovo138HN",
+    "@toppiarshat22", "@spam_piar_chatik", "@giftsExen", "@Shark_Chat", "@birzha_chato",
+    "@shopshat210", "@vzpiar4", "@chaatvz", "@tgseller4all", "@rrgn_54",
+    "@investhotchat", "@ukraine_polandd_chat", "@channel_market1", "@ARSKchat", "@vpiskimskoblastt",
+    "@Piarhelp", "@krimeasimferopl", "@gruppachat5at", "@bratstvo_proc", "@korbor_ru",
+    "@trolling_syndicate", "@telegabirga", "@StandKnifeReworkpb", "@PiarCpam", "@cryptopepep",
+    "@nikolaypankevichchat", "@mellstroyopen", "@elitelita", "@peterdaelon", "@Rossiyada_ish_elonlari",
+    "@maryanskaya", "@ua_warszawa_family", "@Ryazan_Chat62", "@denejniiepotoki", "@slivkesh_wb_oz_yandex",
+    "@mihnevo24", "@piar_kanalov_1", "@reklamateladm", "@Wroclaw_polsha", "@market_NFT_sale",
+    "@chat451", "@taropiar", "@kuples", "@Mui_Ne_Vietnam", "@glavnayadorogatyva",
+    "@ururu", "@pipiskavpiska", "@marketplace_wildberries_ozonchat", "@nampoput", "@bhperm59",
+    "@GODZIMOTO", "@piardublechat", "@tihiezori_chat", "@hogiz2", "@steal_a_brainrotchat31",
+    "@TG_ChannelConnect", "@Genicheskbaraholka", "@buysellnftx", "@nabaikal_85", "@PlayStationStarsChat",
+    "@piar_grin", "@TAXl_SERVlCE_RF", "@bayer_helper_dordoi", "@richduels", "@sanktpetrburgrabotaxaltura",
+    "@chat_snezhnoe", "@ukraincifrankfurt", "@tginfochat", "@znakomstvaa_chaat", "@SHADOWPLASE",
+    "@mauljbu", "@auto1mrpl", "@tg_sale", "@chatikks2025", "@modeli_moscoww",
+    "@frelanschat", "@PiterdaElonlarii", "@Kalanchak_1", "@ostorozhno41_chat", "@UndertaleDeltaruneBot",
+    "@Voronej_Rabota_Mari", "@yktzachat", "@SuperPiarChannel", "@reklama_klk_chat", "@birzhakupitprodat",
+    "@hytdsk", "@tenqqaichat", "@TGhelp_group", "@zavodoukovsk_ad", "@ozon_partners",
+    "@canalesygruposperuanos", "@prodajaauto02", "@zykovoflood", "@NFTchatlink", "@chatmasss",
+    "@Avitomlt", "@processmania", "@vzpodpiska62", "@Golden_garant_chat", "@poiskgospogi",
+    "@TowerDefenseSimulator4", "@paqapaq_chat_uzb", "@lana_f79", "@baraholka_genichesk", "@chattte",
+    "@PR_Free_chat", "@otcgifttg", "@wildberries_business", "@tokmak20244", "@Chat_vinchkkk",
+    "@Chatznakomstv14", "@virtchat_love", "@workyourbutt", "@reklamka_2020", "@ROSSIYADA_ISH_ELONLAR",
+    "@taxi_rostov61", "@whitemaxmod_chat", "@blumcrypto_chat_china", "@vsemp1ar", "@chat_dariaFera",
+    "@pervomarket", "@okrugx", "@ObmenValyutyDubai", "@vzaimno002", "@TaxiVseSvoiBorodino24",
+    "@vvzaimkaa", "@SPBishElonlarii", "@vikuptovarawb", "@bryansk_offchat", "@SellerTeamGroups",
+    "@inosmichannel_chat", "@baraholka_tymen72", "@voslavubogiyou", "@tver2024group", "@telegabirza",
+    "@chatderbent_arti", "@keshmania", "@Dropi_dropovodi9", "@tokmak_osnova", "@belvape9",
+    "@zaberemennostru", "@chatikai8", "@idochat", "@vp_room", "@vzzzzzmmmm",
+    "@lyantorchat", "@MSDP_KLIN", "@misidepr", "@leningradskaya_city", "@avitochat04",
+    "@work_korea", "@obsheniya_Tv7", "@Ukrainians_in_Krakow", "@ishuparndev", "@fschatf",
+    "@PhuQuoc_today", "@mazdachinacx5", "@tachka_darom", "@Temkachat3", "@oborona172ru",
+    "@minecraft_lab", "@yjournal_chat", "@yourcomchat", "@PITERDAISHUZBEK", "@spasibo_4at",
+    "@EmpireMarketOTC", "@veles_v_okope_chat", "@rabota_horeca_spb", "@nftchaat", "@NFT_Digita",
+    "@daylbf", "@znakomstva1_Ldnr", "@Bitget_Italia", "@pled_besedka", "@DeltaZzzzz",
+    "@baraholkaberlin", "@tungi_chat_bevalari", "@Chat_PR_Raskrutka", "@MelitopolBerdynsk",
+    "@EDCTEM_1", "@nedvijimostMLT", "@ITWarsawCommunity", "@nual69smoke", "@PITERDAELONUZISH",
+    "@gateio_en", "@irkutsk_doska", "@HouseeMarket", "@emelianovo24info", "@sterlitamak_chatt",
+    "@intimportalekb", "@krskreklama24", "@adsprofit8", "@voligda1", "@Semikarakorsk_chat",
+    "@doska124777", "@mamvoprosru", "@mat56kv", "@shotamul", "@marketnrw",
+    "@promthabYandex", "@confettipiar", "@barguzin03bur", "@KGundDE", "@CM_android",
+    "@CHAT_KAZAN_116", "@chtotonapisalxs", "@love66tg", "@otcgifts_tg", "@Baraxolca_Melitopol",
+    "@market_bel", "@piarciatvz", "@vape_baraholka_vitebsk", "@birja_medik1", "@HoChiMinh_Saigon",
+    "@fighter_bomber", "@hgfljo", "@piarChatik123", "@SaleColoredCityNewOhta", "@piarchytiks",
+    "@avitochatlu", "@nft_prodazhi", "@reklama_telegrama1", "@community_incognito", "@korzwbozon",
+    "@podslushanozalari", "@promin", "@KissMeNN252", "@dps_24", "@Reklama_vakansiu",
+    "@oblig_flood", "@Simferopol60letOkt", "@forelosetiidomodedovo", "@piarumis", "@reklamaroi",
+    "@prodvigtelega", "@SATANA_MARKET", "@Standoff_chatik3", "@vasha_reklama_krsk", "@chatkalininec",
+    "@MP_promocode", "@domashniy_tumen", "@prvz_111", "@dmbchatik", "@ProdazhaPokupkaBirzha",
+    "@nayti1lll", "@iQestTraders", "@chatikz44", "@businessmelitopol", "@avto_zhigulev",
+    "@tgrynok", "@chatvseinstrumenti", "@mediaROOMblog", "@Osinka777", "@chat_baraholka_zp",
+    "@kamenskshakhtinskiy", "@angarskwenov38", "@VisageOTC", "@tovarniiichat", "@rabotachatvcem",
+    "@Lyubertsy_obyavleniya", "@marketpro_yugMoskvyiMO", "@COUNTRY_Baraxolka", "@yardater",
+    "@ognizaliva3", "@idmurino_2", "@ubt_telegram", "@naytiichat", "@ReCaptcha2",
+    "@chat_delofff", "@rechevikitmn", "@proseka7", "@SellStories", "@forfree2027",
+    "@frggg334", "@lyublinskij_park", "@centr_zaniatosti", "@tgstarfarmchat", "@NFTchat8",
+    "@Rent_Vietnam", "@gruppa_obshchenia1", "@zvezdnyi_gorodok_Tyumen72rus", "@Ustanovka_dveri_RUS",
+    "@samopiarka", "@razVorot_BRD", "@blacklist_en", "@tovar_za_otz_cash", "@mamochkichatik",
+    "@birzha_kanalov12", "@vzaimppiar", "@MariypolBaraxolka", "@taksi_varshava", "@nasok_chat",
+    "@dusseldorfukrain", "@GSM_CLUB_RU", "@gaga_stories_chat", "@the_battle_cats_rus_chat",
+    "@RussiaSale1", "@TGStat_Chat", "@accaifrs", "@nayti334", "@PixarChating",
+    "@Steal_a_brainrotchattt", "@psixologia_iz_Dushi", "@Honda_Freed_Spike_Krasnoyarsk",
+    "@mltbaraholka2024", "@graindchat", "@naytity", "@DiyorbekDiyopa", "@nfttonbuyy",
+    "@pokatuchy", "@Piarchatred", "@Trade_Gifts_Chat", "@tavda_pro", "@chatemocionpossion",
+    "@vzaim_chat_react", "@nsk_all", "@heroku_talks", "@SibirskyiSad", "@avitobust",
+    "@La1ze_chat", "@pravoalpha", "@zalivi_trafika", "@graffiti42k2", "@divchata_katowice",
+    "@baraholka_detskaya_lnr", "@MalahitReceiver", "@zovnovosibirsk54", "@giftovchat",
+    "@WB_OZON_100_cashback", "@Mishanvmoemserdce", "@shelkovo_rabota2", "@fashionpostup_chat",
+    "@ufa_dps_zaton", "@Gromovkatd", "@vreklamke", "@belnovmar", "@spizdanulBrainrota",
+    "@baraholkakuznechikiii", "@Seychelles_ru", "@mytytsrach", "@ChatKadzumilw", "@tovarka_belrus",
+    "@prodajakanalovtg", "@olimpia_72", "@avtomobilisty_kolomny", "@arenda_samui_chat",
+    "@alfaosmotrkaskochat", "@travelask_armenia", "@birzhaPRO100", "@raspopovvostonavpohv",
+    "@polet_sosedi_rnd_chat", "@Gruzaki00000", "@beatifulgirl888", "@obiav1", "@Anabel_birzha",
+    "@mikoyanovka_online", "@marketpro_Podolsk", "@EYEVEREF", "@Toyota_Mark_club", "@Fleamarket2025",
+    "@WiaraNadzieja", "@FreiPiar", "@whitedragoncom", "@karabasnft_chat", "@DomikYO2",
+    "@mlshpiarchat", "@Piar_TGchat", "@chat_nvuti_cabura_KL", "@ishchu_devushkuy",
+    "@RECLAMACIACHATUSLUG", "@naity0", "@lana_f79le", "@SellBuyPiter", "@zags_chehov",
+    "@one_transfer1", "@vzChatCYT", "@Latvia_Marketplace_SNG", "@olimp_5stolic_avangard",
+    "@P_RGroup3", "@poiskdmn", "@vzaimniy_podpiski_chat", "@minoschat", "@DRvvoChat",
+    "@TeleCom_birzha", "@Egipetb", "@MamochkiSuvorovskii", "@ishu085", "@GenshinExchange",
+    "@chatkleverudachi", "@totoro_delivery", "@galaktika_free", "@padg76", "@chat_BMF",
+    "@chatanket379", "@sdam_mlt", "@PRNelidov", "@kalininmmachat", "@expert_friends",
+    "@sdolinavesnaleto", "@papapachuca_chat", "@musofir_ayolar", "@PovarskayaDiaspora",
+    "@pereklichka_donetska", "@towoow", "@Overheard_Dedinovo", "@piarGru", "@morz56",
+    "@svoipiar_new", "@baraholka_neft", "@rabotamskwark", "@nasha_astana_kz", "@ZKAriosto",
+    "@Dpstlb702", "@birzhakanalov1", "@BirzhaShakha", "@electricians_of_russia", "@wbelektrostal",
+    "@VZ_BIRSCA", "@omencor", "@whisper_in_the_night_chat", "@chehov_venyukovo", "@chatvzor",
+    "@Podsluhano_Vinzili", "@kornei_tumen", "@photo_video_wb", "@DRAG0N_VAPE_SH0P", "@tytcc",
+    "@nikolskchat", "@GlobalWaveChat", "@Sky_Chat_group", "@mamapapa7777", "@KingThePiar",
+    "@RCGDTUBECHAT", "@chekvartal", "@tyumenzareka72", "@RazrabotchikiTG", "@kron9chat",
+    "@zapsibgazprom123", "@Optmoskva_chat", "@creativephotochat5", "@oneberloga",
+    "@Zheleznogors_foundation", "@lamimekeru", "@mdps_bardachok_252", "@poyma_onlain",
+    "@spidermarychaa", "@goeuropa_transfer", "@crimea_parnisan_chat", "@cvetochki124",
+    "@SvorobChat", "@help237", "@nashelpoteryal72", "@nashikrakow", "@Reutsegodnya",
+    "@telemetr_chat", "@CCYY_SS", "@chatKlinParki", "@reklama_v_durtuli", "@boomxwin",
+    "@goldsmithclub", "@tagedmichat", "@vgdchat", "@belarus_gdansk_new", "@ultracity2nd",
+    "@utes74", "@Orsk1Oren", "@sosnovoborsk204577", "@vdk_3000", "@onlinecashhit",
+    "@zhk_gorod_zvezd", "@arestantoff", "@atomeyana", "@VtorZaporozhie", "@prodavai_ton_chat",
+    "@La_eMe_mafia", "@ishu090", "@robloxstudio", "@PIAR_S1", "@kalininec_1",
+    "@smolianinovo", "@sovet_aktivistov_lgo", "@wwallet", "@neruads", "@stavropol_obshcheniye",
+    "@petergofsp", "@VERT_rekl", "@BASE_6_4", "@kersxz", "@VDKdoska_chat",
+    "@blockchainDATA", "@AvitoRuSale", "@zk_ruchi", "@review_oz", "@proff_oborudovanie",
+    "@meet_in_wawa", "@Dalat_Vietnam", "@OkLandtmn", "@taxiadler93", "@grypa_yslyg4",
+    "@chati77", "@shoriachat", "@couriersamara", "@AdmiGirl1", "@telegavzaimki",
+    "@DA_Central", "@baraholkamlt2026", "@montenegrobye", "@ARENDA_PKHUKET1", "@tginfochaten",
+    "@filantchat", "@zhkschaste", "@DAILYREKLAMA_CD", "@cash_looo", "@Freelancelead",
+    "@ostafievo_mama", "@crystalkamichat", "@bemowososedi", "@BloxFruitsWinter", "@mltned",
+    "@NftChatiks1", "@komaruchatting", "@Koln_Kleinanzeiigen", "@seler_nfttop", "@gordeevskij",
+    "@ForZe_2026", "@novomolokovo2025", "@BoardofSiberia", "@HainanChatik", "@tatyanamel12",
+    "@helpsellerMP", "@currency_exchange_in_dubai", "@chatik_piar90", "@mainingdag",
+    "@parosmia_postcovid", "@GID_Groups", "@TTtrafic", "@Pattaya_Arenda_ru", "@nft_chat",
+    "@smu88_krylovka_park", "@dombayclub", "@magnitnayaburya", "@Phuket_businessBG", "@gruppy_khv",
+    "@Honda_Civic_5D_8G", "@tayanch103", "@kompashkeee", "@waiter_spb", "@adoptchattrading",
+    "@zarobotoktelegramchat", "@AnnaPavagaCollection", "@avit08", "@Stuttgart_Kleinanzeiigen",
+    "@otzovik_telega", "@zaraysk_reklama", "@floodLy", "@rr149888", "@zavetiILIcho",
+    "@max_galishnikov", "@sunnycity_residense", "@Georgia_Marketplace_SNG", "@BavariaLife",
+    "@besedkaadminov", "@Berlin_Kleinanzaigen", "@TGAdminsChat", "@telegaadmin", "@belarus_gt",
+    "@Pvnforum", "@VapeFleaMarketVLZ", "@chatkgb", "@hike_komenti", "@otrada_lesnaya_sosedi",
+    "@torpedo_zhk", "@podpisnoi_club", "@piar_frilance2", "@NovotroitskRus", "@Vietnam_Transfer",
+    "@AltTG", "@yarmarkasertolovo", "@govorit_starobelskchat", "@nmcommer", "@publickpiarchat",
+    "@Pokupka_KanaIa", "@vzvzvzvzvzvz12", "@moskvasvoihnebrosaem", "@chatgptjb", "@telmanovo_adm",
+    "@vitanovaspb", "@Pattaiaa", "@dokuchaevsk_info", "@Revizor_Birzha", "@gorod_v_lesu",
+    "@kitai_heihe", "@shiktos", "@UVAO_obiavlenia1", "@crimeamotostyle", "@drivehondaz",
+    "@torrservenumflood", "@climatrussia", "@targoweksosedi", "@pr_tg_chat", "@agregmsk",
+    "@gdansk_rabota1", "@piarvzaimvz", "@TK_HOROHIY", "@forestzone23", "@chatYunino",
+    "@ZemoPiar", "@izmaylovsky11", "@sakh_privoz", "@vikeadn", "@vzaimka_777lk",
+    "@filizankachat", "@C5CitroenChat", "@XORAN_ZIMU", "@vzaimki666", "@tanya_yourfit_chat",
+    "@rovenkiobl", "@chatiktokq", "@deinalive", "@defenderchat", "@Kotlovka_dream",
+    "@friendswarsaw", "@boltalkaoktrb", "@TheHanTosChat", "@abandoned_mir_chat", "@vsem2025",
+    "@ElantraHD", "@k7_j6", "@BaraholkaChelybinsk", "@evonovo", "@lancet_community",
+    "@donetsk_don", "@suchka_142_rus", "@uvelirsoft_hotline", "@kollektsiya_nahabino",
+    "@VtorKherson", "@arenda_avto_ultima_sp", "@mosjobjob", "@mokotowsosedi", "@kazakhinpolska",
+    "@sfopros", "@itprivatestadychat", "@piargrupp1", "@chatik_piarnn", "@TU2_DmitrovskyGO",
+    "@apg_family", "@shopogolic2021", "@znakchat1", "@wolasosedi", "@MDSnft",
+    "@tomsx0", "@obyavleniya_65", "@dpdp8877", "@chat_dlya_medvejat", "@brhlksaki",
+    "@Bangkok_sale", "@arkhyzchaat", "@haccpmore", "@PerekypChats", "@bothub_chat",
+    "@pervsales", "@nftchat_sell", "@RuskiStatekCzat", "@pragapoludniesosedi", "@reklmtg",
+    "@naytii0", "@vpiskisamara63", "@UkrainianRzeszow2", "@oblaka_2_chat", "@avtorskiy_tyumen",
+    "@hoblee0", "@psaclub", "@piarchatoo", "@zeroikins_chat", "@SportReklama777",
+    "@yglovoe", "@lp_142", "@abkmprochat", "@oblaka_tyumen_72", "@Dostavka_WildberriesOzonKakhovka",
+    "@chatikobshenya5569", "@Piarrollock69", "@spbtusovka", "@butovo_adverts", "@poputka14_khanalas",
+    "@alfa8biznes_chat", "@jailbreakroblox0", "@kierowcaBolt", "@opora_chat_vp", "@Petelki72",
+    "@sellery_chat", "@pocketoptiontrade_chat", "@tomilinopark_chat", "@budni_geniev1",
+    "@rent_brd", "@pomogatora_chat", "@chatik_030", "@arbitration_party", "@girls_tivat",
+    "@MCA_market", "@Russian_Indian_group", "@Chat_obsheniex", "@mama39chat", "@Rockets_Team",
+    "@crossoute", "@new_realnos", "@mebel_po_karmanu_Mariupol", "@WildLuckChat", "@swkazan1169",
+    "@suntar_obyavleniya", "@Monjaro2026", "@TU1_DmitrovskyGO", "@nooklz_chat", "@VapebarakholkaUFA1002",
+    "@usersec_chatt", "@kupiprodaikras", "@csgochate", "@krsk1240", "@piarsvzchat2",
+    "@AutoPodmogaBialystok", "@nodejs_jobs", "@biznes_v_novosibirske", "@vape_bh_tomsk",
+    "@Deutschland_Kleinanzeigen", "@batumisarpi", "@liidfth", "@severmyr_64k3", "@volontermezgorie",
+    "@inpoland24", "@mtrakt38", "@secret_room_tg", "@n_chat_krs", "@TU5_DmitrovskyGO",
+    "@voyah_Pub", "@archi_cat1", "@otrada_beauty", "@divchata_lublin", "@crosser_chat",
+    "@LobnyaNovostiReklama", "@severkipr", "@ukr_lublin", "@besplatnaya_rekllama", "@DarkPricer",
+    "@Sishikichat", "@gklinii", "@x2bike_chat", "@KOLOMNA150", "@chatvalyushi", "@kugoov3",
+    "@chiillzonee", "@baraholka_chrboksary", "@Billbord_NY", "@vzaimopiar_podpiski_reakcii",
+    "@piar2134", "@baraxolkaveup2022", "@it_donor", "@voiaka_youtube", "@modelizcosmo",
+    "@ifromscrap_sale", "@So2_Brawl", "@salegroups_chat", "@LDGForum", "@vyazmavape",
+    "@baraholka_bugri", "@birzhatgrek", "@spb_shabashka", "@geltek_cosmetology", "@typicalpozchat",
+    "@baraholkaSurgut86", "@svoihnebrosaemVRN36", "@Delaemsame", "@ykka350", "@BELANGEL_31RUS",
+    "@Dedinovo_Onlain", "@ps99tradechat", "@mellichatr", "@vapeKLD1", "@vash_katalog",
+    "@BUTbiotropikaultra", "@gelenchatik", "@ChaatX0", "@Polska_Marketplace_SNG", "@birzhachannelstg",
+    "@krraion", "@prodvigenie_v_telegramme", "@luxms_community", "@chatik_mari_nails", "@torunbydgoszcz",
+    "@globaltrend_company", "@vapebaralokakud", "@Aiiiiiiiiishaa", "@dmb_365_team", "@web3_gifts_telegram",
+    "@evoeburg", "@centure42th", "@chnp_chat", "@piarjat", "@SipsikovaChat", "@vlchat",
+    "@vzpiarchat66", "@shelbyy_so2", "@reklama_teIega", "@cookierunchatichek", "@ryazan_uz",
+    "@sell_buy_do_Moscow", "@nuarushky_chat", "@bki_russia", "@DlyaPsihologov", "@starcevo7777",
+    "@UkrPolgrup", "@piar_chatik_ooo", "@RFAgrotexnika", "@good_good_88", "@birjatrudaleo",
+    "@boostxchange", "@streetLife38", "@TU6_DmitrovskyGO", "@piar_chat_i", "@legallassault",
+    "@salesboard", "@lobushking", "@emomgoloschat", "@estetikcosm", "@MafiaNFTchatik",
+    "@Dubai_Marketplace_SNG", "@severniivalssosedi", "@Aesai", "@nolimitswomenclubchat",
+    "@grupaznakomiee", "@koalapurpurpur", "@el14b", "@chatblogpr", "@telolub_chat",
+    "@trialRF", "@Phuket_chatBG", "@roompark3", "@ARZHD_CHAT", "@chat_priz_vsem",
+    "@tulatayanch071", "@UK_Marketplace_SNG", "@Raffle79", "@BotsHelper", "@AvocadoCallschat",
+    "@PRchatPRc", "@taxikatowicepl", "@forelOsetii15rus", "@botoid", "@Ural_Za_Natur",
+    "@kirovskiy_ru", "@Vyritsagroup", "@vseinstrumenti_for_business_chat", "@VZINSIDER",
+    "@poisklekarstvp", "@archi_chats", "@master_polomaster", "@korocha_tg", "@chatikk35",
+    "@toniqueapp_chat", "@KrutoySuslik228", "@mm_tomsk", "@ym_trade", "@harciz_cz",
+    "@lars_vremenniy_wvoz", "@PorezNaSobakeChat", "@forelvernadskogo", "@hachettelittleheroes",
+    "@mapaiya1mkr16B", "@kochenevskji", "@kurush_sosh_1", "@prodajagensh1", "@sochibbs",
+    "@Luxchinabee", "@novnr68", "@yarus_friends", "@snoopnftgift", "@nwriga", "@TG_PR",
+    "@telegrm_shop", "@plantlife_48", "@verim_i_pobedim", "@unitmarketing_1", "@ForelOsetiiIasenevo",
+    "@snovanovo", "@Chat_Chuzhimi_rukami", "@floorpricegift", "@cat_diabetic", "@Chat_TryNews",
+    "@Deliselkaa", "@chat_bandaadrenalinok", "@connecticum_ccic", "@faworitpartner", "@rabotniki_trudoviki_msk",
+    "@ChatTushino", "@MafiaKutuza", "@piar_chatik25", "@gornyyobyedinyayet", "@proszkowsosedi",
+    "@shat777", "@mama_kazani", "@anim_vect1", "@market_place_region_logistic", "@dengibesplatnootdam",
+    "@rusich_kantemirovskaya", "@tutvacancy", "@Forest138ru", "@dailytelefrag", "@dropovorua",
+    "@vistulauni", "@phuket_buysell_bg", "@sovREMEN2", "@FourChat", "@skysputnik_chat",
+    "@yachtcrewjobchat", "@mvl_5_6", "@Innopolistaxi", "@Cycling_Relax_Club", "@rolevaiaiflud",
+    "@atlant_03", "@tolkhs_zrss", "@virus_piar", "@otsbugs", "@oblaka_tumen",
+    "@piarchat999", "@love_shopogolik", "@svyatoixpamchat", "@nft_presents_telegram", "@ishidevushku",
+    "@vzaimpodpiski02", "@eurostudy_work_travel", "@ShakhtyorskPereChat", "@business_meets24",
+    "@solopool_chat", "@solncevo_barahlo", "@hards_bdsm", "@ArtcoreULTRA", "@GrundAdmins",
+    "@starschat_otziv", "@piar_VZP", "@lubaobanachat", "@dbd440", "@ZnakomstvaMoscowa",
+    "@PEPSUNS2", "@jobinrestoran", "@odminskichatik", "@LoveisICQ", "@piarnchat0",
+    "@Acquaintances2025", "@SocialPhobiaChat", "@lumintomc", "@padelsportsamaragroup",
+    "@DarkForums_HN", "@piarobshenie1", "@ChatNft_Gift", "@bialolenkasosedi", "@sadismical",
+    "@RemJujnoeBunino111", "@GumLena22", "@solariy_sunrise", "@strikearena_guest", "@ArendaDonetska",
+    "@offgaw", "@combotru", "@Zashitnikam22", "@rent_mlt", "@wawersosedi", "@FF_Top_SellerS",
+    "@brukinVit", "@usefulenvironment", "@laishevka", "@avito_chatkari", "@chat_rita_alfa",
+    "@tutors_in_telegram", "@obmenpodpiska", "@reutov_soc", "@imper_strastihttpstme",
+    "@motornd6161", "@samara_dvij", "@chat_young_wave", "@wlochysosedi", "@B3aimpiar",
+    "@rent_krym", "@kristina_akdemir_jewellery", "@chatzanosovcasino", "@WebBotChat",
+    "@komostrovok21", "@KpunepGDPS", "@taksisty_katowice", "@Bali_Marketplace_SNG", "@VpiskiNovosibirsk1",
+    "@posobia_tatarstan", "@piar_vzaimn1", "@bobrochatik", "@pokupkarekl", "@vzaimnooooo1",
+    "@greenpoleno", "@Anti_KVD3", "@TGStatAcademyChat", "@phuket_beauty_bg", "@AFKFORUM",
+    "@it_krakow", "@forelorangepark", "@sokurii", "@DolSetChat", "@d3nterr",
+    "@piarchatlala", "@razdacha_WBOZON", "@Nft_Gifts_Chatik", "@ChVK2027", "@warszawua",
+    "@kladoiskatel71", "@podzemnoecarstvo", "@OTC_KIT", "@shaturasoc", "@prilesnie_dachi",
+    "@voronezhnahodki", "@trschatik", "@stockphoto_quick_help9", "@Astori008", "@pesniplitochnika",
+    "@sar_ppk", "@detibaraholkabutovo", "@standoff_chat25", "@UserExpo", "@run_wawa_run",
+    "@amphibia_chat", "@original_podarik03", "@sapphire_tulun", "@ZAGONCHAT", "@sPriora308",
+    "@moscowmetrocommunity", "@contraDPS", "@batyrzem21", "@yandexgospb", "@DanilDond",
+    "@NNzitl", "@findozor_gvz", "@tun_e2ru", "@dvizh_bydgoszcz", "@chat_dana_manchine",
+    "@OasisOTC_Chat", "@crowleychat", "@grupa5x", "@Changan59", "@galina21091966",
+    "@nhatrang_pro_house", "@atomytulskaya", "@dozor8700", "@DAGOODAY", "@ochotasosedi",
+    "@instachat_active", "@plesetskaya_4istota", "@birstchat", "@FIsh_official", "@maryshkin_log",
+    "@regisserlife", "@aaocean", "@zaufim", "@flatsforfriendsmsk", "@AllianceGarant_chat",
+    "@Andrcb", "@dorveychat", "@ss2ma_dv", "@belaruskatowice", "@rem22kvartir",
+    "@danang_obyavlenia", "@mstroykina", "@Vippersoni2025", "@newPiter14", "@CastingWarszawaTetiana",
+    "@piartgkpiar", "@Vpiski_Chelny_116", "@FreePR_Fox", "@rent_donetsk", "@euc_tomsk",
+    "@sellbotswift", "@sovettepl1", "@spb_best_podrabotka", "@SIBUR_ARENA_CHAT", "@bestFishingChat",
+    "@Grigoriss_shat", "@myasoff33", "@cashbek_za_otzuw", "@Secret_Plase", "@blackberrychat1",
+    "@ApplebaraholkaBelarusi", "@kit_2mo", "@kerfusiki", "@citytelecom_ru", "@caritas_bydgoszcz",
+    "@ham_radio_kazan", "@komnatnye_zvety", "@Oil_GasWorld_Chat", "@bosforskiypark",
+    "@aptekasheringmsk", "@forelramenki15", "@GSNS_Trade", "@LOSTUP1", "@PsihoMoskva",
+    "@OzeroNagaeva", "@stupino_soc", "@sker_chat", "@gelenrent", "@nskbiznes1",
+    "@tm_gifts", "@ledlamp01", "@shopRahmonov", "@chemfua", "@marketingsmm01",
+    "@hramvsokolnikax", "@monotc", "@zem_lyanika_chat", "@promoting_blog", "@novokraskovo5",
+    "@timeofchancefest", "@Vmeste_Armenia", "@santehnicheskie_raboty_v_lobne", "@Kursavka_chat",
+    "@ObmenDenegGoaa", "@Piar_Vzaimna", "@spbrabotagr", "@ShiemPobeduPiter", "@BySellMSK",
+    "@bgu1c", "@ukraincy_olsztyna", "@EcoMarketDjane", "@goydasbchat", "@Vmeste_Germany",
+    "@abkhazia_rent", "@nn_night_club", "@vakansii_vb_ozonn", "@moriwork", "@srodmiesciesosedi",
+    "@novynypolska", "@befriendsclubchat", "@floodAnndi", "@LEGENDACRIMEA", "@tgstat_support_uz",
+    "@sovetexpertchat", "@muslimkazan", "@chatikobd", "@tavernmafia", "@proday_kanal_birzha",
+    "@OlenevkaDa", "@krasnodarbeautiful", "@Samui_buySell_bg", "@gay_podrostki1_rus",
+    "@pragapolnocsosedi", "@ursynowsosedi", "@belorechensk_chat", "@starigrad_belgrade",
+    "@mbousosh10zav", "@delo_hotel", "@GT_Subscribers", "@berkutchatik", "@pomoshrota",
+    "@shiteg", "@transy812", "@verst5fabrichnyyprud", "@tgchat", "@voskresensk_soc",
+    "@school_of_art16", "@zveroboyspb", "@uw_ufa", "@pmbrovist", "@sochibeauttiful",
+    "@mamasditu", "@Vita_proda", "@taxiplchat", "@divchata_trojmiasto", "@Chat_Multi_Bear",
+    "@znak_obsh19", "@vorsclub", "@Chkrkr1", "@ReferalPiarChat", "@tokarya", "@birza_kanalov",
+    "@novye_sokury", "@egorievsk_soc", "@best_team_369", "@bee_rostov", "@olimp217",
+    "@chat_vz_piarr", "@Litovsk9_7", "@shenchjen_chat", "@taxi_mezhgorod180", "@geography_world66",
+    "@Stepwgn_RK", "@fleepchat", "@NoviyLessner", "@collabvp", "@kottyaa_official_chat",
+    "@kotlovka_official", "@yalta_avito", "@krasivye_nomera_telefonov_000", "@ScienceExplainedGroup",
+    "@chat_mam_dekret", "@vape_tula_baraxolka", "@belgorodflora", "@piarchatbywellbinuk",
+    "@VzaimniVZLS", "@aethercloudvapebaraholka", "@problemautochat", "@DefiUniverso",
+    "@jk_promenad", "@smrpiter", "@aso_seo_traffic", "@katowicechatik", "@wilanowsosedi",
+    "@AnimeLand_mismiir", "@dineloli_chat", "@a101_lagolovo", "@chatlove_you", "@telegabaz",
+    "@KHELONA_Global", "@bydzdorov77", "@elite_chat_tg", "@NPV_Noviy_proektt_worldbox",
+    "@mamochkichatru", "@OtdelKadrovR", "@gryazevoy", "@sochi_reklama_bbssochiru", "@cvk_chukchi",
+    "@mariinsky_posad", "@ferm74posideL", "@ischu_druga21", "@SlavRodEdin_Moscow_Rus",
+    "@yugchemskoy_chat", "@stroiteli_64", "@chat_piar80", "@Phangan_buySell_bg", "@qehdbz",
+    "@a101_vsevolozhsk", "@bratsk360", "@openstack_ru", "@siberianNatalia", "@chatik_obsheniam",
+    "@nemopeoples", "@KSVOIRKUTSK", "@abcpr", "@pwrtelegramgroupru", "@klubAd",
+    "@zov_svoRUS", "@krasivyi_nomer_telefona", "@tribuna_school", "@Samui_parentsBG",
+    "@kabkaz_chat", "@cristall_ledi", "@armyansk_chat", "@chatik_domik", "@sonichchat",
+    "@silveryFLOod", "@exchange_reklama", "@jk_kvartal_che", "@vz_piar_kanal", "@vlogchainchat",
+    "@ufa_uslugii", "@jenskiy_kolomne", "@lakfkaaa", "@zaryamkr", "@SquoraLi",
+    "@FishingUl", "@fiery136chat", "@zvchat22c", "@vpiskiRnD18", "@kosmetologdm",
+    "@AnyCorporation", "@vVeideleVka", "@CHATS247", "@infoZa_Russia_chat", "@soc_DDK",
+    "@sosediNR", "@grablab_ru", "@vzpiarpodpiskadf", "@chat_piar3228", "@Welcome_in_Kanal",
+    "@simvol32_35", "@MirraNskRu", "@kalevaalchat", "@idi_covremenem", "@coucholgaa",
+    "@vzpodpison4ik", "@clubvolonterovhere", "@lekarstva_vse", "@PoliceKotikBotik",
+    "@QNextSupport", "@OBMOTKA_CHAT", "@Chistyiles_IL", "@samolet2_chat", "@Kkalugapogovorim",
+    "@H1_H4_visa_appointment_alerts", "@cvetkovchat", "@svgu_mgd", "@evostavr", "@svrzyaztcytov",
+    "@chatikdlyavseh1", "@giftopsw", "@chattgmasterSA", "@nftchatm", "@venderflox_chill",
+    "@PeakChatTG", "@miningkrip", "@wildberries_self_employed", "@ChatBsRb", "@home_tobody",
+    "@znakoms_msk", "@xspark1", "@SADMONOVchat", "@cosmoappar", "@ekn_molodezh",
+    "@vetervpaketechat", "@shotany", "@ishkunlikkk", "@frunze70", "@nfttg_chat",
+    "@anonimnuycha", "@nahodkiwb_ozon_yn", "@QuizNightA101", "@crimeatesla", "@piar_chatikvzz",
+    "@naural_ekb", "@poisk_teambs", "@nelepostread", "@xzx647", "@medicinsheringSun",
+    "@goddessasya", "@tenetautoru", "@stanok208cheat", "@piarhibs", "@klub_puteschestvennikov",
+    "@Slava_USSR1922_2026", "@nevskaya_psy2", "@itgdanskua", "@Lets_talk_IT", "@prodajareklamy",
+    "@bazartg2", "@VGK18", "@nasswqery", "@obyavleniya_ekaterinbur", "@birzhaast",
+    "@RusUgolTorg", "@simintech", "@Kot_pilott", "@domashniy_uslugi_72rus", "@popugai_Sochi",
+    "@KTW_za_Wolna_Rosje", "@giantessRoman", "@themesrussia", "@scammers_internet",
+    "@ikratkayahss", "@MSKPraktikiTantra", "@praimprimorskiy", "@obmenMSK1", "@BIGEYESOFFICIAL_CHATS",
+    "@officialESSSgroup", "@moda890", "@energym_khv", "@krasnoyrsk2050777", "@medikiru",
+    "@XAOSSIT", "@bonniekarpov_chat", "@pandabuyjerseys", "@everdevru", "@openkolyma",
+    "@marketplaiswb0zyandex", "@souzkherson", "@durtulidom", "@Duhovnost8", "@aksel1595",
+    "@vzpiarchvz", "@bookstrilll", "@rod_tur_psy", "@darisolca_22", "@lazerudalen",
+    "@rembertowsosedi", "@volnovahaperechat", "@chatdomodedovo", "@LUGANSK_DK", "@chat_pohudenia",
+    "@Svoboda03uu", "@aigentx_group", "@Advertising_exchange_1", "@shoopaakk", "@kvartiracl",
+    "@lrkutsk2025", "@barcadotchat", "@Phangan_bg", "@osanca2", "@BlitzFlud",
+    "@warsawczat", "@wesolasosedi", "@indiageneric", "@refefe15", "@cchatutiioo",
+    "@danyatrep77", "@Japanesecows", "@vzaimnopiarchik", "@ezikranec", "@BesedkaRu88",
+    "@car2steal_new", "@GTEurope", "@sars_avito", "@sexbesttula", "@gorodosa",
+    "@ndlapker", "@rabota_podrabotkazz", "@Masastormpatriot", "@malaujjk", "@nn_podrabotka",
+    "@internetcasper", "@luna1_lunaa", "@moskvadlyvas", "@Dimzopm", "@nrw_anzeige",
+    "@Business_direct", "@svoih_ne_brosaem_Azov_RO", "@zhkrusichkantemirovskiy", "@ElenaLR_007",
+    "@parol_Veta", "@kazanskaya161", "@eski_jazma_ushaqi", "@sibirskiisadekb", "@ELEKTRIKAzdes",
+    "@coking_CA", "@relaksadminov", "@ATLANT_MOSKOW", "@vzaimno_78", "@CountryRoleplayin",
+    "@chetkiirayon", "@ischu_tebya_Ufa_chat", "@JJDchat", "@Zolotye_Klyuchi", "@VestnikKKN_chat",
+    "@masterapmru", "@silaikrasotasfaberlic", "@fryktiirk", "@cirtop", "@hatik2020",
+    "@nkesss_chat", "@djoais", "@neonskychat", "@ochota_by", "@Marketplace_Gods",
+    "@chat_adminwinru", "@Tashkenooooooo7", "@uytniydomLeTa", "@funny_talkingchat",
+    "@expat_sri_lanka_azia", "@pykpykpykd", "@wutuxi", "@diver_group", "@mwfilmchat",
+    "@Greenville_Adequate_Role_Play", "@simferopol_chats1", "@birvatg", "@perekop_chat",
+    "@wellbinukvz", "@cybergifts", "@sinkovo_i_zaprudnoe", "@quva29maktab", "@fadeeva_54",
+    "@herosev", "@zborov_krasiv_schastliv", "@crimea_krym", "@academMeetings", "@FrunzenskijRajon",
+    "@obyavlenia_ufa0", "@zorchatik", "@thebestsexdonetsk", "@probusiness_kzn", "@india_evisa",
+    "@adushinovaviktoriya", "@cult_zemli", "@komsomolskoe_crimea", "@lumikco", "@piar_chat_top_1",
+    "@Avito_Dagestana05", "@online_biznec", "@sflepiar", "@kartapobytuPL", "@warsawgirls1",
+    "@migrant_to_PL", "@endibond", "@WIGchat", "@restreamwebcaster", "@Tattinskoe_YYO",
+    "@MalayaOhta_Sosedi", "@interdom_telegram", "@ishrastov", "@pro1zdorovye", "@ChatRioServicep",
+    "@kydrolovskiy_chat", "@vzpodpiskiesh", "@ukrgliwice", "@komenrek", "@my_vmeste_volontery",
+    "@coinmarket1", "@Piarbiss", "@ZENSchat", "@alesha_mozhet", "@mynzk", "@Wannagenius",
+    "@funkoother", "@uvelirsoft_eps", "@chatKittyLounge", "@chatchipwefan", "@Villa_Kapri",
+    "@razvitie_lady", "@skryminy", "@borovikovkanalpay", "@telebaks_chat", "@fleamarket_chelyabinsk",
+    "@kaipiy", "@PSznakomstva", "@OnePlus_9R", "@bschatick", "@GTMoldova", "@tbs_gr",
+    "@divinity_chatik", "@krasivyi_zakat", "@chat_pro_1", "@antikvd123", "@strananagatino",
+    "@Catmilk90", "@grapaupau72", "@Szczecin_IT", "@ProstoVzaimno", "@svetozarbook",
+    "@Eg01stu_v_potoke", "@ChatikRyadom", "@SnowFunechat", "@Mir458725", "@legal_tas",
+    "@birjakanalovleo", "@duymovochka8", "@ursynow_bel", "@mersin_gayrimenkul", "@katalogsmmchat",
+    "@haltura_petersburg", "@tokyo_auto", "@ya76ru", "@podium_otradny", "@NPos_chat",
+    "@nightcemetery444", "@chat_Huggy_rus", "@Gadzhievo1", "@saskakepasosedi", "@rustoska_chat",
+    "@MoscowBillionaireClub", "@cavg56g9", "@work_in_atomy", "@setun_1958", "@CryptoDealChat",
+    "@parklamina", "@Yerevanchat1", "@kvartalrumyantsevo", "@poputchik_rf_ua", "@pizgei",
+    "@yaroslavl4at", "@Free_Eco_Market", "@baraholkapermvape", "@Piar_Chat536", "@agalatovo_market",
+    "@Murmansk_Uncensored_chat", "@piarshatik_mm", "@KiteKchat", "@eldord666", "@Union_Tyumen_72rus",
+    "@rabota_vr36", "@Ona_Fanidan1", "@dorammum", "@htmlbase_ru", "@NFTVantpark_Chat",
+    "@polskasportowa", "@primedota", "@baruigaON", "@rost0vsk", "@trudogolici",
+    "@Dolgoprudnyservice", "@tatushkii", "@murlick9", "@vipgirlsspbb", "@zoom_black_river",
+    "@osinkanext", "@brawl_stars_chatik_2", "@blg_vegas", "@target_insider_telegram_ads",
+    "@ZnakomstvaOnlineChat", "@mastertonyteam", "@ChainSub", "@Virt_Otzuv", "@o1_Valhalla_1o",
+    "@xyegloteses", "@doskabesplatnihobyavleniy", "@tnews_chat", "@JustGriefLT", "@piarbezplatno",
+    "@RelaxationFamily", "@SovetRoditeleyShkoly1411", "@CHATSUPRI63", "@vzaimnaya_reklama_prodvizhenie",
+    "@Domoff_krsk", "@FamSberBank", "@maskvada_ishlari", "@Birzha_Chat24", "@CPM2TOP_CHAT",
+    "@slavabrother970", "@RabbitsVpiska", "@MSDPS_ZELENOGRAD", "@Server_KillersChat", "@leebet_chat_ru",
+    "@bydgoszczukw", "@trojmiasto_photographers_club", "@PolandUkraine22", "@gei_znakomstva_Piterchat",
+    "@successfullakshmi", "@vnutrilena", "@barmaglotikis2023_chat", "@baltik_expo", "@rustelegram2",
+    "@Monetika_chat", "@obshenieLoves", "@championpomaketingu", "@nastevvichat", "@swingers_tagan",
+    "@Best_Mysic_Only_Dj_Mixed", "@CasinoChat1win", "@Bestsellerhindibooksgroup", "@sectofdespair",
+    "@zmey57discuss", "@AtlantUdalilRebra", "@NFTgift_chat", "@club2metra", "@vtgroup_realestate",
+    "@ukrainci_v_krakovi", "@infostenapro", "@fyrru123", "@piar_chat_lana", "@kosmetichkaoriflame",
+    "@KsWb25", "@kontrakt2026svo", "@reboot1337", "@SavePlanet", "@marinokomerc", "@skyto_fly",
+    "@ozon_saratov_seller", "@mariupol_don", "@Phuket_Airsoft_Paintball_team", "@logovodio00",
+    "@GTUsbekistan", "@creep_shxw", "@StilZhizniWild", "@marfacosmetic", "@GK_Parnas",
+    "@fssimulator", "@kutkatkatya", "@masteriovs", "@rolka_rikimorty", "@rhinobaits1",
+    "@skupkalekarst", "@noDBalll", "@XoidSeekers", "@CrownTM_CM", "@dubrovka_uvao",
+    "@med_sochi", "@electromontazhchat", "@mutual_support_club", "@vse_turi", "@retreataltaynitay",
+    "@sntsolp", "@sponsors_and_kept_women", "@bialorusiniolsztyn", "@rossosh_36", "@mobail_legends_chat",
+    "@Mistika911ProInvestChat", "@mariaamay1", "@job_nsd_nsk", "@abk_molodezh_kraszhd", "@ekb_ndv66",
+    "@vakansii_telegramm", "@ener_godar", "@Reclama_reclama", "@AtomyPrityjenie", "@vzaimopodpiskacomment",
+    "@godnolytika_chat", "@gigaortschat", "@miryworldbox", "@ukeip_ekb", "@komod36",
+    "@maskvadaishlanglar", "@standcartel", "@Secret_Collection_card", "@BusinessEcoSystemPL",
+    "@uganekrd", "@toiletmarketRU", "@RuskiNetChat", "@falginbost", "@taman_hub",
+    "@kosandra_gais", "@kovka_stb", "@nadezhdaeventsw", "@jewish_edits_chat", "@BotUrlSearch",
+    "@vinurussian", "@masterna4ass", "@zdarovezhov_cummunity", "@Ssylki_KHV", "@farmers_portal",
+    "@dl_tehcnology", "@MonopolyVP", "@Rabota_Leninkent", "@znakomstvaVdonetsk", "@piar_chat_vip1",
+    "@mamasochi123", "@TREZVYISEVER", "@cool_idk", "@zhestnn_chat", "@mtpiar", "@m0bile_phone",
+    "@taxi_Enakievo_dpr", "@AcroYogaStavropol", "@AutoPodmogaWroclaw", "@foryou21pilots",
+    "@cdayc", "@moskva_qizl", "@ozerniParkPolevaya117k3", "@acg_groupjj", "@infotonchat",
+    "@informatykavistula", "@work_marketplace_Top", "@seksgroup100", "@laishevo", "@xmenclub",
+    "@stroitelitveri", "@defolt_chat", "@tent_lu", "@superPro1", "@FilosiyaWellessSW",
+    "@SuperLoversRU", "@samara_kosplay", "@tgvzaimkitg", "@MotorDepotArtem", "@Transport_Moscow_Chat",
+    "@VipRusProm", "@afineevopark_chat", "@moscowst14", "@seloyamanzug", "@KAWABANGAGANG1",
+    "@RobloxPleasant", "@steamserver", "@hunterxhunter4221", "@OrifleimVoronez", "@fanfnaf37",
+    "@robloxseriali46", "@CloningFactory", "@metroroyaleoff_chat9", "@koryosaramuz", "@drughubdark",
+    "@kaomorichat", "@alterrussia_chelyabinsk", "@parksovet", "@med09chat", "@GTSerbia",
+    "@BIZNES_reklamaYo", "@GCOvideo", "@lokeicc", "@mskgagarinskiy", "@golang_speak",
+    "@My_CooL_Wildberries", "@vzvzvzchatt", "@Dom_V_Sokolnikah", "@mitrofanievskoe_bez_promzony",
+    "@ModusBI", "@AndefectSay", "@Asteria66685", "@nrovog", "@musicgrupsss", "@vilyvruki",
+    "@americanbully_DG", "@galaxytalk", "@zeroguides", "@multi_KOT007", "@TROLLL_CHAT",
+    "@dermatolog_chatik", "@bim_rostov", "@blackrussiaChatEnot", "@bazarslivok", "@greenpark_chat",
+    "@nightsaken", "@allahpidorasaaa", "@vpiska123region", "@x512point", "@bliexpress",
+    "@tgc_up", "@reklama_muslumovo", "@dduhii", "@grandviewjk", "@ZarechnyPark", "@gruppa_Temohi",
+    "@sedirean", "@soclifelotoshino", "@rusich_kantemirovskii", "@INFLUENCAchat", "@GTPoland",
+    "@ProFlow116", "@womenyoga_aroma", "@vzaimopiarish", "@avitootzivirab", "@domino_etalon",
+    "@yubitca2", "@flowervalley00", "@JKLunarChatsobstvennikov", "@gejclud", "@cosmotmb",
+    "@glebcerkassChat66", "@sovetexpertov", "@data_inpol_chat", "@kosmetologia0_ru",
+    "@chanel2023temka", "@gondons123", "@leoklub", "@optsklad19", "@gdtud3", "@Kmoodpc",
+    "@viwwaxx", "@P_stikers", "@tashiranu", "@samara_tut63", "@Onimao_Chat", "@MakeevkaPereChat",
+    "@ObmenP2P_Bulgaria", "@zelenogradmm", "@tchatim", "@likm48", "@spagetti08", "@rustaveli14",
+    "@tgstockmarketads", "@FinTovNovoselieSPb", "@rabotakalinigradru", "@topchatmen", "@ANDERSON1140",
+    "@znakomstvaVcrimea", "@pypsiki245", "@shamanrusfan", "@durovshadowchat", "@noklive18",
+    "@naitidevushkuparnya", "@teatritoryacnat", "@MoiDom_ZaGorodom", "@C4B_Telegram_Bots",
+    "@spherevpnchat", "@permanentmkru", "@selreama", "@sochy_chat", "@leon_lemon365_chat",
+    "@royale_chat_royale", "@Trading_Chat_Asi", "@interiorngn", "@esteticosmo", "@kemerovo_online_official",
+    "@legalholik_czat", "@TradeTgNft", "@mavic37rus", "@visa_runway_butler", "@BLACK_OPT1",
+    "@elitesfixed", "@suhiyad", "@cosygreen", "@penisgarrysmod", "@MAINCRAFTRYS", "@NFT_basa",
+    "@CardUnion", "@ToptemiChat", "@katalogstoreChat", "@typmath_chat", "@russelldjones_chat"
+]
+
+print(f"\n✅ Loaded {len(groups)} total groups")
+
+# =========================
+# MAIN LOOP
+# =========================
+GROUPS_PER_SESSION = 5
+GROUP_DELAY = 15  # 15 seconds between groups
+SESSION_GAP = 25   # 25 seconds between sessions
+ALL_SESSIONS_GAP = 60   # 60 seconds after all sessions
+
+print("\n" + "="*60)
+print("STARTING GROUP JOINING SCRIPT")
+print("="*60)
+print(f"Settings:")
+print(f"- Groups per session: {GROUPS_PER_SESSION}")
+print(f"- Delay between groups: {GROUP_DELAY}s")
+print(f"- Delay between sessions: {SESSION_GAP}s")
+print(f"- Delay after all sessions: {ALL_SESSIONS_GAP}s")
+print(f"- Total groups to join: {len(groups)}")
+print("="*60 + "\n")
+
+# Global variable to track progress
+current_group_offset = 0
+total_joined = 0
+total_groups = len(groups)
+completed = False
+
+async def join_groups(session_data):
+    """Join groups for a specific session starting from its assigned position"""
+    joined = 0
+    skipped = 0
+    
+    async with TelegramClient(
+        StringSession(session_data["string_session"]),
+        session_data["api_id"],
+        session_data["api_hash"]
+    ) as client:
+        
+        start_idx = session_data['group_start'] + current_group_offset
+        end_idx = min(start_idx + GROUPS_PER_SESSION, len(groups))
+        
+        # If we've reached the end of groups
+        if start_idx >= len(groups):
+            return 0, False, True
+        
+        print(f"[{session_data['name']}] Joining groups {start_idx+1}-{end_idx}")
+        print(f"Progress: {start_idx+1}-{end_idx} of {total_groups}")
+        
+        for i in range(start_idx, end_idx):
+            group = groups[i]
+                
+            try:
+                await client(JoinChannelRequest(group))
+                joined += 1
+                print(f"[{session_data['name']}] ✅ Joined {group}")
+                await asyncio.sleep(GROUP_DELAY)
+                
+            except UserAlreadyParticipantError:
+                skipped += 1
+                print(f"[{session_data['name']}] ⚡ Already in {group}")
+                
+            except (ChannelPrivateError, ValueError):
+                skipped += 1
+                print(f"[{session_data['name']}] 🔒 Private/Invalid: {group}")
+                
+            except FloodWaitError as e:
+                print(f"[{session_data['name']}] ⏳ Flood wait {e.seconds}s - SKIPPING TO NEXT SESSION")
+                return joined, True, False
+                
+            except FloodError as e:
+                print(f"[{session_data['name']}] 🚨 FLOOD ERROR - SKIPPING TO NEXT SESSION")
+                return joined, True, False
+                
+            except Exception as e:
+                skipped += 1
+                print(f"[{session_data['name']}] ❌ Failed {group}: {type(e).__name__}")
+        
+    return joined, False, False
+
+async def main():
+    global current_group_offset, total_joined, completed
+    
+    while not completed:
+        print(f"\n{'='*60}")
+        print(f"CYCLE START - Offset: {current_group_offset}")
+        print(f"Groups remaining: {total_groups - current_group_offset}")
+        print(f"Progress: {current_group_offset}/{total_groups} groups")
+        print(f"{'='*60}\n")
+        
+        for session in sessions:
+            if completed:
+                break
+                
+            print(f"\n=== Using {session['name']} ===")
+            
+            joined, flood_wait, reached_end = await join_groups(session)
+            
+            if reached_end:
+                print(f"\n{'='*60}")
+                print("🎉 ALL GROUPS HAVE BEEN PROCESSED!")
+                print(f"Total groups: {total_groups}")
+                print("Script will now stop.")
+                print(f"{'='*60}")
+                completed = True
+                return  # Exit the function completely
+                
+            if flood_wait:
+                print(f"[{session['name']}] ⏩ Skipping to next session due to flood wait")
+                await asyncio.sleep(5)
+            else:
+                total_joined += joined
+                print(f"[{session['name']}] ✅ Joined {joined} groups")
+                print(f"[{session['name']}] 💤 Sleeping {SESSION_GAP}s before next session\n")
+                await asyncio.sleep(SESSION_GAP)
+        
+        if not completed:
+            print(f"\n{'='*60}")
+            print(f"CYCLE COMPLETED!")
+            print(f"Current offset: {current_group_offset}")
+            print(f"Next offset: {current_group_offset + (len(sessions) * GROUPS_PER_SESSION)}")
+            print(f"Total joined so far: {total_joined}")
+            print(f"Sleeping {ALL_SESSIONS_GAP}s before next cycle...")
+            print(f"{'='*60}\n")
+            
+            # Move to next batch of groups
+            current_group_offset += len(sessions) * GROUPS_PER_SESSION
+            
+            # Check if all groups are processed
+            if current_group_offset >= total_groups:
+                print(f"\n{'='*60}")
+                print("🎉 ALL GROUPS HAVE BEEN PROCESSED!")
+                print(f"Total groups processed: {total_groups}")
+                print("Script will now stop.")
+                print(f"{'='*60}")
+                completed = True
+                break
+            else:
+                # Wait before next cycle
+                for i in range(ALL_SESSIONS_GAP // 15):
+                    print(f"⏰ Next cycle in: {ALL_SESSIONS_GAP - (i*15)} seconds")
+                    await asyncio.sleep(15)
+    
+    # Final completion message
+    print(f"\n{'='*60}")
+    print("SCRIPT COMPLETED SUCCESSFULLY!")
+    print(f"✓ All {total_groups} groups have been processed")
+    print(f"✓ Script has automatically stopped")
+    print(f"✓ No more groups to join")
+    print(f"{'='*60}")
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print(f"\n\n{'='*60}")
+        print("SCRIPT STOPPED BY USER")
+        print(f"Progress: {current_group_offset}/{total_groups} groups")
+        print(f"Groups joined: {total_joined}")
+        print(f"{'='*60}")
+    except Exception as e:
+        print(f"\nFatal error: {e}")
