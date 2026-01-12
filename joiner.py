@@ -1091,9 +1091,9 @@ print(f"Added {557} new Ukrainian groups from the provided links")
 # MAIN LOOP
 # =========================
 GROUPS_PER_SESSION = 5
-GROUP_DELAY = 15  # 15 seconds between groups
-SESSION_GAP = 25   # 25 seconds between sessions
-ALL_SESSIONS_GAP = 60   # 60 seconds after all sessions
+GROUP_DELAY = 25  # 25 seconds between groups
+SESSION_GAP = 45   # 45 seconds between sessions
+ALL_SESSIONS_GAP = 120   # 120 seconds after all sessions
 
 print("\n" + "="*60)
 print("STARTING GROUP JOINING SCRIPT")
