@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 import asyncio
 import os
-import json
+import glob
 import random
 import logging
 import socket
 import time
-import gc  # Added for garbage collection
-import psutil  # Added for monitoring
 from telethon import TelegramClient, events, types
-from telethon.sessions import StringSession
+from telethon.sessions import SQLiteSession
 from telethon.errors import (
     UserDeactivatedBanError,
     FloodWaitError,
@@ -24,17 +22,19 @@ from datetime import datetime
 init(autoreset=True)
 
 # Configuration - Optimized for Termux
-CREDENTIALS_FOLDER = 'tdata'
-os.makedirs(CREDENTIALS_FOLDER, exist_ok=True)
-TARGET_USER = "OgDigital"  # Target username for DM forwarding
+ACCOUNTS_FOLDER = 'accounts'
+os.makedirs(ACCOUNTS_FOLDER, exist_ok=True)
+TARGET_USER = "orgjhonysins"  # Target username for DM forwarding
 
-# Updated Timing Settings - INCREASED DELAYS FOR CPU REDUCTION
-MIN_DELAY = 180   # 3 minutes minimum delay between groups (increased from 60)
-MAX_DELAY = 300   # 5 minutes maximum delay between groups (increased from 120)
-CYCLE_DELAY = 3600  # 60 minutes between full cycles (increased from 1200)
+# Updated Timing Settings - 1 to 2 minutes between groups
+MIN_DELAY = 60   # 1 minute minimum delay between groups (seconds)
+MAX_DELAY = 120  # 2 minutes maximum delay between groups (seconds)
+CYCLE_DELAY = 1200  # 20 minutes between full cycles (seconds)
 MAX_RETRIES = 2  # Maximum retry attempts
-CACHE_CLEAR_INTERVAL = 1800  # Clear cache every 30 minutes (seconds)
-CPU_THROTTLE_THRESHOLD = 80  # CPU usage percentage to trigger throttling
+
+# API credentials - using same for all to avoid issues
+API_ID = 2040
+API_HASH = "b18441a1ff607e10a989891a5462e627"
 
 # Lightweight logging
 logging.basicConfig(
@@ -44,23 +44,6 @@ logging.basicConfig(
 
 # Auto-Reply Message
 AUTO_REPLY_MESSAGE = "Dm @OgDigital For Buy"
-
-def check_cpu_usage():
-    """Check CPU usage and throttle if needed"""
-    try:
-        cpu_percent = psutil.cpu_percent(interval=1)
-        if cpu_percent > CPU_THROTTLE_THRESHOLD:
-            print(Fore.YELLOW + f"High CPU usage detected: {cpu_percent}% - Throttling...")
-            return True
-    except:
-        pass
-    return False
-
-def clear_memory_cache():
-    """Clear memory cache and run garbage collection"""
-    gc.collect()  # Run garbage collection
-    print(Fore.BLUE + "Memory cache cleared")
-    return True
 
 def check_internet_connection(host="8.8.8.8", port=53, timeout=5):
     """Check internet connection with timeout"""
@@ -74,45 +57,25 @@ async def wait_for_internet():
     """Wait until internet connection is available"""
     print(Fore.YELLOW + "Waiting for internet connection...")
     while not check_internet_connection():
-        print(Fore.RED + "No internet connection. Retrying in 30 seconds...")
-        await asyncio.sleep(30)  # Increased from 10 seconds
+        print(Fore.RED + "No internet connection. Retrying in 10 seconds...")
+        await asyncio.sleep(10)
     print(Fore.GREEN + "Internet connection available!")
 
 def display_banner():
     """Minimal banner for Termux"""
     print(Fore.GREEN + """
-     в–Ҳв–Ҳв–Ҳв–Ҳв–Ҳв–Ҳв•— в–Ҳв–Ҳв–Ҳв–Ҳв–Ҳв–Ҳв•— в–Ҳв–Ҳв–Ҳв–Ҳв–Ҳв–Ҳв•— в–Ҳв–Ҳв•—в–Ҳв–Ҳв–Ҳв–Ҳв–Ҳв–Ҳв–Ҳв–Ҳв•—
-     в–Ҳв–Ҳв•”в•җв•җв•җв–Ҳв–Ҳв•—в–Ҳв–Ҳв•”в•җв•җв–Ҳв–Ҳв•—в–Ҳв–Ҳв•”в•җв•җв–Ҳв–Ҳв•—в–Ҳв–Ҳв•‘в•ҡв•җв•җв–Ҳв–Ҳв•”в•җв•җв•қ
-     в–Ҳв–Ҳв•‘   в–Ҳв–Ҳв•‘в–Ҳв–Ҳв–Ҳв–Ҳв–Ҳв–Ҳв•”в•қв–Ҳв–Ҳв–Ҳв–Ҳв–Ҳв–Ҳв•”в•қв–Ҳв–Ҳв•‘   в–Ҳв–Ҳв•‘   
-     в–Ҳв–Ҳв•‘   в–Ҳв–Ҳв•‘в–Ҳв–Ҳв•”в•җв•җв–Ҳв–Ҳв•—в–Ҳв–Ҳв•”в•җв•җв–Ҳв–Ҳв•—в–Ҳв–Ҳв•‘   в–Ҳв–Ҳв•‘   
-     в•ҡв–Ҳв–Ҳв–Ҳв–Ҳв–Ҳв–Ҳв•”в•қв–Ҳв–Ҳв•‘  в–Ҳв–Ҳв•‘в–Ҳв–Ҳв–Ҳв–Ҳв–Ҳв–Ҳв•”в•қв–Ҳв–Ҳв•‘   в–Ҳв–Ҳв•‘   
-      в•ҡв•җв•җв•җв•җв•җв•қ в•ҡв•җв•қ  в•ҡв•җв•қв•ҡв•җв•җв•җв•җв•җв•қ в•ҡв•җв•қ   в•ҡв•җв•қ   
+     ██████╗ ██████╗ ██████╗ ██╗████████╗
+     ██╔═══██╗██╔══██╗██╔══██╗██║╚══██╔══╝
+     ██║   ██║██████╔╝██████╔╝██║   ██║   
+     ██║   ██║██╔══██╗██╔══██╗██║   ██║   
+     ╚██████╔╝██║  ██║██████╔╝██║   ██║   
+      ╚═════╝ ╚═╝  ╚═╝╚═════╝ ╚═╝   ╚═╝   
     """)
-    print(Fore.GREEN + "ORBIT ADBOT - RDP Optimized v2.2 (LOW CPU)\n")
-    print(Fore.YELLOW + f"вҖў Delay Range: {MIN_DELAY//60}-{MAX_DELAY//60} mins")
-    print(Fore.YELLOW + f"вҖў Cycle Delay: {CYCLE_DELAY//60} mins")
-    print(Fore.YELLOW + f"вҖў Cache Clear: {CACHE_CLEAR_INTERVAL//60} mins interval")
-    print(Fore.YELLOW + "вҖў CPU Throttle: Enabled\n")
-
-def save_session(session_name, data):
-    """Save session data with error handling"""
-    try:
-        path = os.path.join(CREDENTIALS_FOLDER, f"{session_name}.json")
-        with open(path, 'w') as f:
-            json.dump(data, f)
-    except Exception:
-        pass
-
-def load_session(session_name):
-    """Load session data with error handling"""
-    try:
-        path = os.path.join(CREDENTIALS_FOLDER, f"{session_name}.json")
-        if os.path.exists(path):
-            with open(path, 'r') as f:
-                return json.load(f)
-    except Exception:
-        pass
-    return None
+    print(Fore.GREEN + "ORBIT ADBOT - Session File Version v2.2\n")
+    print(Fore.YELLOW + f"• Using .session files from '{ACCOUNTS_FOLDER}/' folder")
+    print(Fore.YELLOW + f"• Delay Range: {MIN_DELAY//60}-{MAX_DELAY//60} mins")
+    print(Fore.YELLOW + f"• Cycle Delay: {CYCLE_DELAY//60} mins")
+    print(Fore.YELLOW + "• Concurrent Sessions: UNLIMITED\n")
 
 async def get_last_message(client):
     """Get last message with minimal requests"""
@@ -138,7 +101,7 @@ async def safe_forward(client, group, message, session_name):
         return False
 
 async def process_groups(client, session_name, message):
-    """Efficient group processing with increased delay for CPU reduction"""
+    """Efficient group processing with 1-2 minute delay"""
     if not message:
         print(Fore.YELLOW + f"[{session_name}] No message to forward")
         return
@@ -162,15 +125,10 @@ async def process_groups(client, session_name, message):
     for group in groups:
         start_time = datetime.now()
         
-        # Check CPU usage before processing
-        if check_cpu_usage():
-            print(Fore.YELLOW + f"[{session_name}] High CPU - Adding extra delay")
-            await asyncio.sleep(random.uniform(60, 120))  # Extra 1-2 minutes
-        
         if await safe_forward(client, group, message, session_name):
             processed += 1
         
-        # Calculate and display delay (3-5 minutes - INCREASED)
+        # Calculate and display delay (1-2 minutes)
         elapsed = (datetime.now() - start_time).total_seconds()
         delay = random.uniform(MIN_DELAY, MAX_DELAY)
         remaining_delay = max(0, delay - elapsed)
@@ -178,73 +136,43 @@ async def process_groups(client, session_name, message):
         if remaining_delay > 0:
             minutes = remaining_delay / 60
             print(Fore.BLUE + f"[{session_name}] Waiting {minutes:.1f} minutes before next group")
-            # Split sleep into smaller chunks to check CPU
-            for _ in range(int(remaining_delay // 30) + 1):
-                await asyncio.sleep(min(30, remaining_delay))
-                remaining_delay -= 30
-                if remaining_delay <= 0:
-                    break
-                
-                # Periodic CPU check during sleep
-                if check_cpu_usage():
-                    extra_sleep = random.uniform(30, 60)
-                    print(Fore.YELLOW + f"[{session_name}] CPU high - Sleeping extra {extra_sleep:.0f}s")
-                    await asyncio.sleep(extra_sleep)
+            await asyncio.sleep(remaining_delay)
     
     print(Fore.CYAN + f"[{session_name}] Sent to {processed}/{len(groups)} groups")
 
 async def setup_auto_reply(client, session_name):
-    """Lightweight auto-reply with CPU check"""
+    """Lightweight auto-reply"""
     @client.on(events.NewMessage(incoming=True))
     async def handler(event):
         if event.is_private:
-            # Check CPU before auto-reply
-            if check_cpu_usage():
-                await asyncio.sleep(random.uniform(5, 10))  # Small delay if CPU high
-            
             try:
                 await event.reply(AUTO_REPLY_MESSAGE)
                 print(Fore.MAGENTA + f"[{session_name}] Auto-replied")
             except Exception as e:
                 print(Fore.RED + f"[{session_name}] Auto-reply failed: {str(e)}")
 
-async def manage_session(session_name, credentials):
-    """Robust session management with internet monitoring and CPU optimization"""
-    cache_timer = time.time()
-    
+async def manage_session(session_path, session_name):
+    """Robust session management with .session files"""
     while True:
         client = None
         try:
-            print(Fore.CYAN + f"[{session_name}] Starting session...")
-            
-            # Clear cache at regular intervals
-            if time.time() - cache_timer > CACHE_CLEAR_INTERVAL:
-                clear_memory_cache()
-                cache_timer = time.time()
-            
-            # Check CPU before connecting
-            if check_cpu_usage():
-                print(Fore.YELLOW + f"[{session_name}] High CPU - Delaying connection")
-                await asyncio.sleep(random.uniform(60, 180))
+            print(Fore.CYAN + f"[{session_name}] Starting from .session file...")
             
             # Wait for internet before starting
             if not check_internet_connection():
                 print(Fore.YELLOW + f"[{session_name}] Waiting for internet...")
                 await wait_for_internet()
             
+            # Use .session file directly
             client = TelegramClient(
-                StringSession(credentials["string_session"]),
-                credentials["api_id"],
-                credentials["api_hash"],
+                session_path,
+                API_ID,
+                API_HASH,
                 device_model="Android",
                 system_version="10",
                 app_version="8.4",
                 lang_code="en",
-                system_lang_code="en-US",
-                connection_retries=2,  # Reduced retries
-                request_retries=2,     # Reduced retries
-                auto_reconnect=True,
-                sequential_updates=True  # Process updates sequentially
+                system_lang_code="en-US"
             )
             
             # Connect with timeout
@@ -256,23 +184,14 @@ async def manage_session(session_name, credentials):
                 print(Fore.RED + f"[{session_name}] Session not authorized")
                 return
                 
-            print(Fore.GREEN + f"[{session_name}] Successfully connected!")
+            me = await client.get_me()
+            print(Fore.GREEN + f"[{session_name}] Successfully connected as @{me.username or me.first_name or me.id}!")
             
             await setup_auto_reply(client, session_name)
 
             # Main operation loop
             while True:
                 try:
-                    # Clear cache at intervals
-                    if time.time() - cache_timer > CACHE_CLEAR_INTERVAL:
-                        clear_memory_cache()
-                        cache_timer = time.time()
-                    
-                    # Check CPU before operation
-                    if check_cpu_usage():
-                        print(Fore.YELLOW + f"[{session_name}] High CPU - Delaying operation")
-                        await asyncio.sleep(random.uniform(120, 300))
-                    
                     # Check internet before operation
                     if not check_internet_connection():
                         print(Fore.YELLOW + f"[{session_name}] Internet lost, waiting...")
@@ -285,40 +204,24 @@ async def manage_session(session_name, credentials):
                     
                     print(Fore.YELLOW + f"[{session_name}] Cycle completed. Sleeping for {CYCLE_DELAY//60} minutes...")
                     
-                    # Sleep with periodic internet and CPU checks
-                    sleep_chunks = CYCLE_DELAY // 60  # Check every minute
-                    for i in range(sleep_chunks):
+                    # Sleep with periodic internet checks
+                    for i in range(CYCLE_DELAY // 30):
                         if not check_internet_connection():
                             print(Fore.YELLOW + f"[{session_name}] Internet check failed")
                             break
-                        
-                        # Clear cache at intervals during sleep
-                        if time.time() - cache_timer > CACHE_CLEAR_INTERVAL:
-                            clear_memory_cache()
-                            cache_timer = time.time()
-                        
-                        # CPU check during sleep
-                        if check_cpu_usage() and i < sleep_chunks - 1:
-                            extra_sleep = random.uniform(30, 90)
-                            print(Fore.YELLOW + f"[{session_name}] CPU high - Adding {extra_sleep:.0f}s sleep")
-                            await asyncio.sleep(extra_sleep)
-                        
-                        await asyncio.sleep(60)  # Sleep in 1-minute chunks
+                        await asyncio.sleep(30)
                         
                 except Exception as e:
                     print(Fore.RED + f"[{session_name}] Operation error: {type(e).__name__} - {str(e)}")
-                    # Clear cache on error
-                    clear_memory_cache()
-                    await asyncio.sleep(120)  # Increased from 60 seconds
+                    await asyncio.sleep(60)
 
         except UserDeactivatedBanError:
             print(Fore.RED + f"[{session_name}] Account banned")
             break
         except Exception as e:
             print(Fore.RED + f"[{session_name}] Connection failed: {type(e).__name__} - {str(e)}")
-            print(Fore.YELLOW + f"[{session_name}] Retrying in 60 seconds...")
-            clear_memory_cache()  # Clear cache on connection failure
-            await asyncio.sleep(60)  # Increased from 30 seconds
+            print(Fore.YELLOW + f"[{session_name}] Retrying in 30 seconds...")
+            await asyncio.sleep(30)
         finally:
             if client:
                 try:
@@ -326,14 +229,10 @@ async def manage_session(session_name, credentials):
                     print(Fore.YELLOW + f"[{session_name}] Disconnected")
                 except:
                     pass
-            clear_memory_cache()  # Clear cache on disconnect
 
 async def main():
-    """Optimized main function with internet monitoring and CPU optimization"""
+    """Optimized main function with .session file support"""
     display_banner()
-    
-    # Initial cache clear
-    clear_memory_cache()
 
     # Initial internet check
     if not check_internet_connection():
@@ -341,69 +240,93 @@ async def main():
         await wait_for_internet()
 
     try:
-        # Simple session management - NO CONCURRENT LIMIT
-        num_sessions = int(input("Enter number of sessions: "))
-        if num_sessions < 1:
-            raise ValueError("At least 1 session required")
-
-        tasks = []
-        for i in range(1, num_sessions + 1):
-            session_name = f"session{i}"
-            creds = load_session(session_name)
-            
-            if not creds:
-                print(Fore.CYAN + f"\nConfiguring {session_name}:")
-                creds = {
-                    "api_id": int(input("API ID: ")),
-                    "api_hash": input("API Hash: "),
-                    "string_session": input("String Session: ")
-                }
-                save_session(session_name, creds)
-            
-            tasks.append(manage_session(session_name, creds))
-
-        # Run ALL sessions concurrently without limits
-        print(Fore.GREEN + f"Starting {len(tasks)} sessions with NO concurrent limit...")
+        # Find all .session files in accounts folder
+        session_files = glob.glob(os.path.join(ACCOUNTS_FOLDER, '*.session'))
         
-        # Run all tasks concurrently without any restrictions
+        if not session_files:
+            print(Fore.RED + f"❌ No .session files found in '{ACCOUNTS_FOLDER}/' folder!")
+            print(Fore.YELLOW + f"Place your .session files in the '{ACCOUNTS_FOLDER}/' folder")
+            print(Fore.YELLOW + "Example: accounts/916205219094.session")
+            return
+        
+        print(Fore.GREEN + f"✅ Found {len(session_files)} .session files")
+        
+        # Display found sessions
+        for i, session_file in enumerate(session_files, 1):
+            session_name = os.path.basename(session_file).replace('.session', '')
+            print(Fore.CYAN + f"{i:2d}. {session_name}")
+        
+        print(Fore.YELLOW + "\n" + "═" * 50)
+        
+        # Ask for confirmation
+        use_all = input(Fore.CYAN + "Use ALL sessions? (y/n): ").strip().lower()
+        
+        tasks = []
+        if use_all == 'y':
+            # Use all sessions
+            selected_files = session_files
+            print(Fore.GREEN + f"\n🚀 Starting ALL {len(session_files)} sessions simultaneously...")
+        else:
+            # Let user select specific sessions
+            print(Fore.CYAN + "\nEnter session numbers to use (comma-separated, e.g., 1,3,5)")
+            print(Fore.CYAN + "Or type 'all' to use all sessions")
+            selection = input(Fore.CYAN + "Selection: ").strip().lower()
+            
+            if selection == 'all':
+                selected_files = session_files
+            else:
+                try:
+                    indices = [int(x.strip()) - 1 for x in selection.split(',')]
+                    selected_files = [session_files[i] for i in indices if 0 <= i < len(session_files)]
+                except:
+                    print(Fore.RED + "Invalid selection, using all sessions")
+                    selected_files = session_files
+        
+        # Create tasks for selected sessions
+        for session_file in selected_files:
+            session_name = os.path.basename(session_file).replace('.session', '')
+            tasks.append(manage_session(session_file, session_name))
+        
+        if not tasks:
+            print(Fore.RED + "❌ No sessions selected!")
+            return
+        
+        # Run ALL sessions concurrently without limits
+        print(Fore.GREEN + f"\n🔥 Starting {len(tasks)} sessions with NO concurrent limit...")
+        
+        # Show starting countdown
+        for i in range(3, 0, -1):
+            print(Fore.YELLOW + f"Starting in {i}...")
+            await asyncio.sleep(1)
+        
+        print(Fore.GREEN + "⚡ ALL SESSIONS RUNNING SIMULTANEOUSLY NOW!\n")
+        
+        # Run all tasks concurrently
         await asyncio.gather(*tasks, return_exceptions=True)
 
-    except (ValueError, KeyboardInterrupt):
-        print(Fore.YELLOW + "\nOperation cancelled")
+    except KeyboardInterrupt:
+        print(Fore.YELLOW + "\nOperation cancelled by user")
     except Exception as e:
         print(Fore.RED + f"Fatal error: {type(e).__name__} - {str(e)}")
 
 if __name__ == "__main__":
-    # Install psutil if not available
-    try:
-        import psutil
-    except ImportError:
-        print(Fore.YELLOW + "Installing psutil for CPU monitoring...")
-        os.system("pip install psutil")
-        import psutil
-    
-    # Auto-restart mechanism with CPU consideration
+    # Auto-restart mechanism
     restart_count = 0
-    while restart_count < 5:  # Reduced from 10 to prevent CPU overload
+    while restart_count < 5:  # Prevent infinite restart loop
         try:
             asyncio.run(main())
+            break  # Exit loop if main completes normally
         except KeyboardInterrupt:
             print(Fore.YELLOW + "\nScript stopped by user")
             break
         except Exception as e:
             restart_count += 1
             print(Fore.RED + f"Script crashed: {type(e).__name__}")
-            
-            # Clear cache before restart
-            clear_memory_cache()
-            
-            # Longer delay on restart if CPU might be high
-            delay = min(30 * restart_count, 120)  # Max 2 minutes
-            print(Fore.YELLOW + f"Restarting in {delay} seconds... (Attempt {restart_count}/5)")
-            time.sleep(delay)
+            if restart_count < 5:
+                print(Fore.YELLOW + f"Restarting in 10 seconds... (Attempt {restart_count}/5)")
+                time.sleep(10)
+            else:
+                print(Fore.RED + "Too many restarts. Please check your configuration.")
     
-    if restart_count >= 5:
-        print(Fore.RED + "Too many restarts. Please check your configuration.")
-    
-    # Final cache clear
-    clear_memory_cache()
+    print(Fore.CYAN + "\n" + "═" * 50)
+    print(Fore.CYAN + "Script execution completed")
