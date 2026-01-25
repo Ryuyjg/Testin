@@ -9,7 +9,7 @@ import time
 import socket
 import logging
 from datetime import datetime
-from telethon import TelegramClient, events, functions
+from telethon import TelegramClient, events, functions, types
 from telethon.sessions import StringSession
 from telethon.errors import (
     UserDeactivatedBanError,
@@ -25,6 +25,9 @@ from telethon.errors import (
     PasswordHashInvalidError
 )
 from colorama import init, Fore, Style, Back
+import hashlib
+import base64
+import struct
 
 # Initialize colorama
 init(autoreset=True)
@@ -92,13 +95,14 @@ def display_banner():
     ║     ╚██████╔╝╚██████╔╝███████╗███████╗███████║   ██║        ║
     ║      ╚═════╝  ╚═════╝ ╚══════╝╚══════╝╚══════╝   ╚═╝        ║
     ║                                                              ║
-    ║               ULTIMATE TELEGRAM TOOLKIT v4.0                 ║
+    ║               ULTIMATE TELEGRAM TOOLKIT v5.0                 ║
     ║              THE MOST POWERFUL SCRIPT IN THE WORLD           ║
+    ║                     WITH FULL 2FA SUPPORT                    ║
     ║                                                              ║
     ╚══════════════════════════════════════════════════════════════╝
     """)
     print(Fore.CYAN + "📱 " + Fore.WHITE + "Created by: " + Fore.YELLOW + "@ogdigital")
-    print(Fore.GREEN + "🔥 " + Fore.WHITE + "Features: " + Fore.YELLOW + "5-IN-1 Ultimate Toolkit")
+    print(Fore.GREEN + "🔥 " + Fore.WHITE + "Features: " + Fore.YELLOW + "12-IN-1 Ultimate Toolkit")
     print(Fore.MAGENTA + "⚡ " + Fore.WHITE + "Status: " + Fore.GREEN + "READY FOR MASS OPERATIONS")
     print()
 
@@ -1608,6 +1612,769 @@ async def option8_channel_forwarder():
     await asyncio.gather(*tasks, return_exceptions=True)
 # ==================== END NEW OPTION ====================
 
+# ==================== NEW OPTIONS FROM SEX.PY ====================
+
+# DELAY CONFIGURATION FOR NEW OPTIONS
+MIN_DELAY_BETWEEN_GROUPS = 15
+MAX_DELAY_BETWEEN_GROUPS = 30
+MIN_DELAY_BETWEEN_SESSIONS = 10
+MAX_DELAY_BETWEEN_SESSIONS = 20
+FLOOD_WAIT_DELAY = 30
+
+async def check_session_valid(session_path, session_name):
+    """Check if session is valid and authorized"""
+    client = None
+    try:
+        api_creds = get_rotated_api()
+        client = TelegramClient(session_path, api_creds['api_id'], api_creds['api_hash'])
+        
+        await client.connect()
+        
+        if not await client.is_user_authorized():
+            print(Fore.RED + f"[{session_name}] ❌ Session not authorized")
+            return False
+        
+        me = await client.get_me()
+        print(Fore.GREEN + f"[{session_name}] ✅ Valid session - @{me.username or me.first_name}")
+        return True
+        
+    except Exception as e:
+        print(Fore.RED + f"[{session_name}] ❌ Invalid session: {str(e)[:50]}")
+        return False
+    finally:
+        if client:
+            await client.disconnect()
+
+async def option9_check_sessions():
+    """Check all sessions in accounts folder"""
+    display_banner()
+    print(Fore.CYAN + "\n" + "═" * 60)
+    print(Fore.GREEN + "✅ SESSION VALIDITY CHECK")
+    print(Fore.CYAN + "═" * 60)
+    
+    session_files = glob.glob(os.path.join(ACCOUNTS_FOLDER, '*.session'))
+    
+    if not session_files:
+        print(Fore.RED + f"❌ No .session files found in '{ACCOUNTS_FOLDER}/' folder!")
+        return
+    
+    print(Fore.GREEN + f"✅ Found {len(session_files)} session files")
+    print()
+    
+    valid_count = 0
+    tasks = []
+    
+    for session_file in session_files:
+        session_name = os.path.basename(session_file).replace('.session', '')
+        tasks.append(check_session_valid(session_file, session_name))
+    
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    valid_count = sum(1 for r in results if r is True)
+    
+    print(Fore.CYAN + "\n" + "═" * 60)
+    print(Fore.YELLOW + f"📊 RESULTS: {valid_count}/{len(session_files)} sessions are valid")
+    print(Fore.CYAN + "═" * 60)
+
+# ==================== HELPER FUNCTIONS FOR PASSWORD HASHING ====================
+def compute_password_hash(password, salt):
+    """Compute password hash for SRP"""
+    import hashlib
+    import base64
+    
+    hash_func = hashlib.sha256
+    hash1 = hash_func(salt + password.encode('utf-8')).digest()
+    hash2 = hash_func(hash1).digest()
+    return hash_func(hash2 + salt).digest()
+
+def compute_check_password(password, algo):
+    """Compute check password for SRP verification"""
+    import hashlib
+    import base64
+    
+    pw_hash = compute_password_hash(password, algo.salt)
+    return hashlib.sha256(algo.p + pw_hash).digest()
+
+# ==================== POWERFUL 2FA PASSWORD CHANGER ====================
+async def change_2fa_password_powerful(session_path, session_name):
+    """Powerful 2FA password changer that works for ALL accounts"""
+    client = None
+    try:
+        api_creds = get_rotated_api()
+        client = TelegramClient(session_path, api_creds['api_id'], api_creds['api_hash'])
+        
+        await client.connect()
+        
+        if not await client.is_user_authorized():
+            print(Fore.RED + f"[{session_name}] ❌ Session not authorized")
+            return False
+        
+        me = await client.get_me()
+        print(Fore.GREEN + f"[{session_name}] 👤 Account: @{me.username or me.first_name}")
+        
+        # Get current password info
+        try:
+            password_info = await client(functions.account.GetPasswordRequest())
+            
+            if password_info.has_password:
+                print(Fore.YELLOW + f"[{session_name}] 🔒 2FA is ENABLED")
+                
+                # Ask for current password
+                current_password = input(Fore.YELLOW + f"   Enter CURRENT 2FA password: ").strip()
+                if not current_password:
+                    print(Fore.RED + f"   ❌ Current password required")
+                    return False
+                
+                # Verify current password first
+                try:
+                    # Ask for new password
+                    new_password = input(Fore.YELLOW + f"   Enter NEW 2FA password: ").strip()
+                    if not new_password:
+                        print(Fore.RED + f"   ❌ New password required")
+                        return False
+                    
+                    confirm_password = input(Fore.YELLOW + f"   Confirm NEW 2FA password: ").strip()
+                    if new_password != confirm_password:
+                        print(Fore.RED + f"   ❌ Passwords don't match")
+                        return False
+                    
+                    hint = input(Fore.YELLOW + f"   Enter password hint (optional): ").strip()
+                    
+                    # Use edit_2fa method which is simpler and more reliable
+                    try:
+                        await client.edit_2fa(
+                            current_password=current_password,
+                            new_password=new_password,
+                            hint=hint
+                        )
+                        
+                        print(Fore.GREEN + f"[{session_name}] ✅ 2FA PASSWORD CHANGED SUCCESSFULLY!")
+                        print(Fore.YELLOW + f"   Old password: {current_password}")
+                        print(Fore.YELLOW + f"   New password: {new_password}")
+                        print(Fore.YELLOW + f"   Hint: {hint if hint else 'None'}")
+                        return True
+                        
+                    except PasswordHashInvalidError:
+                        print(Fore.RED + f"[{session_name}] ❌ WRONG CURRENT PASSWORD!")
+                        return False
+                    except Exception as e:
+                        print(Fore.RED + f"[{session_name}] ❌ Password change error: {str(e)[:100]}")
+                        # Try alternative method
+                        try:
+                            await client(functions.account.UpdatePasswordSettingsRequest(
+                                password=types.InputCheckPasswordSRP(
+                                    srp_id=password_info.current_algo.srp_id,
+                                    A=password_info.current_algo.A,
+                                    M1=compute_check_password(current_password, password_info.current_algo)
+                                ),
+                                new_settings=types.account.PasswordInputSettings(
+                                    new_algo=password_info.new_algo,
+                                    new_password_hash=compute_check_password(new_password, password_info.new_algo),
+                                    hint=hint,
+                                    email=password_info.email_unconfirmed_pattern,
+                                    new_secure_settings=None
+                                )
+                            ))
+                            print(Fore.GREEN + f"[{session_name}] ✅ 2FA PASSWORD CHANGED (alternative method)!")
+                            return True
+                        except Exception as e2:
+                            print(Fore.RED + f"[{session_name}] ❌ Alternative method also failed: {str(e2)[:100]}")
+                            return False
+                            
+                except Exception as e:
+                    print(Fore.RED + f"[{session_name}] ❌ Password verification failed: {str(e)[:50]}")
+                    return False
+                    
+            else:
+                print(Fore.YELLOW + f"[{session_name}] 🔓 2FA is NOT ENABLED")
+                
+                enable = input(Fore.YELLOW + f"   Enable 2FA? (y/n): ").strip().lower()
+                if enable != 'y':
+                    print(Fore.YELLOW + f"   ⏭️ Skipping")
+                    return False
+                
+                new_password = input(Fore.YELLOW + f"   Enter NEW 2FA password: ").strip()
+                if not new_password:
+                    print(Fore.RED + f"   ❌ Password required")
+                    return False
+                
+                confirm_password = input(Fore.YELLOW + f"   Confirm NEW 2FA password: ").strip()
+                if new_password != confirm_password:
+                    print(Fore.RED + f"   ❌ Passwords don't match")
+                    return False
+                
+                hint = input(Fore.YELLOW + f"   Enter password hint (optional): ").strip()
+                
+                # Enable 2FA using simpler method
+                try:
+                    await client.edit_2fa(new_password=new_password, hint=hint)
+                    print(Fore.GREEN + f"[{session_name}] ✅ 2FA ENABLED successfully!")
+                    print(Fore.YELLOW + f"   Password: {new_password}")
+                    print(Fore.YELLOW + f"   Hint: {hint if hint else 'None'}")
+                    return True
+                except Exception as e:
+                    print(Fore.RED + f"[{session_name}] ❌ Failed to enable 2FA: {str(e)[:100]}")
+                    return False
+                    
+        except SessionPasswordNeededError:
+            print(Fore.RED + f"[{session_name}] ❌ Session requires 2FA password to login")
+            print(Fore.YELLOW + f"   Please login with 2FA first")
+            return False
+        except Exception as e:
+            print(Fore.RED + f"[{session_name}] ❌ Error checking 2FA: {str(e)[:100]}")
+            return False
+            
+    except Exception as e:
+        print(Fore.RED + f"[{session_name}] ❌ Connection error: {str(e)[:100]}")
+        return False
+    finally:
+        if client:
+            try:
+                await client.disconnect()
+            except:
+                pass
+
+async def option10_change_2fa():
+    """POWERFUL 2FA PASSWORD MANAGER - Works for ALL accounts"""
+    display_banner()
+    print(Fore.CYAN + "\n" + "═" * 60)
+    print(Fore.GREEN + "🔐 POWERFUL 2FA PASSWORD MANAGER")
+    print(Fore.CYAN + "═" * 60)
+    
+    print(Fore.YELLOW + "\n⚡ FEATURES:")
+    print(Fore.YELLOW + "   ✅ Change 2FA password for accounts WITH existing 2FA")
+    print(Fore.YELLOW + "   ✅ Enable 2FA for accounts WITHOUT 2FA")
+    print(Fore.YELLOW + "   ✅ Works with ALL Telegram accounts")
+    print(Fore.YELLOW + "   ✅ Secure password verification")
+    print()
+    
+    session_files = glob.glob(os.path.join(ACCOUNTS_FOLDER, '*.session'))
+    
+    if not session_files:
+        print(Fore.RED + f"❌ No .session files found!")
+        return
+    
+    available_sessions = []
+    for session_file in session_files:
+        session_name = os.path.basename(session_file).replace('.session', '')
+        available_sessions.append((session_name, session_file))
+    
+    print(Fore.GREEN + f"✅ Found {len(available_sessions)} sessions in accounts folder")
+    
+    for i, (session_name, session_file) in enumerate(available_sessions, 1):
+        print(Fore.CYAN + f"   {i:2d}. {session_name}")
+    
+    print(Fore.YELLOW + "\n" + "─" * 40)
+    print(Fore.CYAN + "📝 Select sessions to manage 2FA")
+    selection = input(Fore.CYAN + "   Enter session numbers (comma-separated) or 'all': ").strip().lower()
+    
+    if selection == 'all':
+        selected_sessions = available_sessions
+    else:
+        try:
+            indices = [int(x.strip()) - 1 for x in selection.split(',')]
+            selected_sessions = [available_sessions[i] for i in indices if 0 <= i < len(available_sessions)]
+        except:
+            print(Fore.RED + "❌ Invalid selection")
+            return
+    
+    if not selected_sessions:
+        print(Fore.RED + "❌ No sessions selected!")
+        return
+    
+    print(Fore.YELLOW + f"\n⚠️  Will process {len(selected_sessions)} sessions")
+    
+    proceed = input(Fore.YELLOW + f"\nProceed? (y/n): ").strip().lower()
+    if proceed != 'y':
+        print(Fore.YELLOW + "⏹️ Cancelled")
+        return
+    
+    print(Fore.GREEN + f"\n⚡ PROCESSING {len(selected_sessions)} SESSIONS...\n")
+    
+    enabled_count = 0
+    changed_count = 0
+    skipped_count = 0
+    failed_count = 0
+    
+    for idx, (session_name, session_file) in enumerate(selected_sessions, 1):
+        print(Fore.MAGENTA + f"\n📱 Processing session {idx}/{len(selected_sessions)}: {session_name}")
+        
+        success = await change_2fa_password_powerful(session_file, session_name)
+        
+        if success:
+            # Check if this was enable or change
+            # Simple check based on message
+            if "ENABLED" in str(success):
+                enabled_count += 1
+            else:
+                changed_count += 1
+        else:
+            failed_count += 1
+        
+        # Delay between sessions
+        if idx < len(selected_sessions):
+            delay = random.uniform(10, 20)
+            print(Fore.BLUE + f"⏳ Waiting {delay:.1f}s before next session...")
+            await asyncio.sleep(delay)
+    
+    print(Fore.CYAN + "\n" + "═" * 60)
+    print(Fore.GREEN + f"📊 POWERFUL 2FA MANAGEMENT RESULTS:")
+    print(Fore.GREEN + f"   ✅ 2FA Enabled: {enabled_count}")
+    print(Fore.CYAN + f"   🔄 2FA Changed: {changed_count}")
+    print(Fore.RED + f"   ❌ Failed: {failed_count}")
+    print(Fore.YELLOW + f"   📊 Total Processed: {enabled_count + changed_count + failed_count}")
+    print(Fore.CYAN + "═" * 60)
+
+async def handle_flood_wait(error, session_name, action):
+    """Handle flood wait errors"""
+    if hasattr(error, 'seconds'):
+        wait_time = error.seconds
+        print(Fore.RED + f"[{session_name}] ⏳ Flood wait for {action}: {wait_time} seconds")
+        
+        total_wait = wait_time + 5
+        for remaining in range(total_wait, 0, -1):
+            print(Fore.YELLOW + f"[{session_name}] ⏰ Waiting: {remaining}s remaining", end='\r')
+            await asyncio.sleep(1)
+        print(Fore.GREEN + f"[{session_name}] ✅ Flood wait complete, resuming...")
+        return True
+    return False
+
+async def join_groups_for_session(session_path, session_name, groups_to_join, delay_between_groups_min, delay_between_groups_max):
+    """Join groups for a single session"""
+    client = None
+    try:
+        api_creds = get_rotated_api()
+        client = TelegramClient(session_path, api_creds['api_id'], api_creds['api_hash'])
+        
+        await client.connect()
+        
+        if not await client.is_user_authorized():
+            print(Fore.RED + f"[{session_name}] ❌ Session not authorized")
+            return 0, 0
+        
+        me = await client.get_me()
+        print(Fore.GREEN + f"[{session_name}] 👤 Account: @{me.username or me.first_name}")
+        
+        joined = 0
+        total = len(groups_to_join)
+        
+        for i, group_username in enumerate(groups_to_join, 1):
+            try:
+                if not group_username.startswith('@'):
+                    group_username = '@' + group_username
+                
+                print(Fore.CYAN + f"[{session_name}] 🔗 Joining {group_username} ({i}/{total})...")
+                
+                entity = await client.get_entity(group_username)
+                await client(functions.channels.JoinChannelRequest(entity))
+                
+                print(Fore.GREEN + f"[{session_name}] ✅ Joined {group_username}")
+                joined += 1
+                
+                # DELAY BETWEEN GROUPS
+                if i < total:
+                    delay = random.uniform(delay_between_groups_min, delay_between_groups_max)
+                    print(Fore.BLUE + f"[{session_name}] ⏳ Waiting {delay:.1f}s before next group...")
+                    await asyncio.sleep(delay)
+                
+            except FloodWaitError as e:
+                if await handle_flood_wait(e, session_name, f"joining {group_username}"):
+                    continue
+                else:
+                    print(Fore.RED + f"[{session_name}] ❌ Flood wait error for {group_username}")
+            except Exception as e:
+                error_msg = str(e)
+                if "USER_ALREADY_PARTICIPANT" in error_msg:
+                    print(Fore.YELLOW + f"[{session_name}] ⚠️ Already in {group_username}")
+                elif "USER_NOT_MUTUAL_CONTACT" in error_msg:
+                    print(Fore.RED + f"[{session_name}] ❌ Can't join private group {group_username}")
+                elif "CHANNEL_PRIVATE" in error_msg:
+                    print(Fore.RED + f"[{session_name}] ❌ Private channel {group_username}")
+                elif "INVITE_REQUEST_SENT" in error_msg:
+                    print(Fore.YELLOW + f"[{session_name}] 📨 Join request sent for {group_username}")
+                    joined += 1
+                elif "FLOOD_WAIT" in error_msg.upper():
+                    print(Fore.RED + f"[{session_name}] ⏳ Flood wait, waiting {FLOOD_WAIT_DELAY}s...")
+                    await asyncio.sleep(FLOOD_WAIT_DELAY)
+                    continue
+                else:
+                    print(Fore.RED + f"[{session_name}] ❌ Failed to join {group_username}: {error_msg[:50]}")
+        
+        return joined, total
+        
+    except Exception as e:
+        print(Fore.RED + f"[{session_name}] ❌ Error: {str(e)[:50]}")
+        return 0, 0
+    finally:
+        if client:
+            await client.disconnect()
+
+async def option11_join_groups():
+    """Join groups from groups.txt file with automatic cycles"""
+    display_banner()
+    print(Fore.CYAN + "\n" + "═" * 60)
+    print(Fore.GREEN + "👥 JOIN GROUPS FROM FILE (AUTOMATIC CYCLES)")
+    print(Fore.CYAN + "═" * 60)
+    
+    # Ask for delays
+    print(Fore.YELLOW + "\n⏱️ SET DELAY CONFIGURATION:")
+    
+    try:
+        delay_between_groups_min = float(input(Fore.CYAN + "   Delay between groups (min seconds): ").strip() or "15")
+        delay_between_groups_max = float(input(Fore.CYAN + "   Delay between groups (max seconds): ").strip() or "30")
+        
+        delay_between_sessions_min = float(input(Fore.CYAN + "   Delay between sessions (min seconds): ").strip() or "10")
+        delay_between_sessions_max = float(input(Fore.CYAN + "   Delay between sessions (max seconds): ").strip() or "20")
+        
+        delay_between_cycles_min = float(input(Fore.CYAN + "   Delay between cycles (min minutes): ").strip() or "5")
+        delay_between_cycles_max = float(input(Fore.CYAN + "   Delay between cycles (max minutes): ").strip() or "10")
+        
+        # Convert minutes to seconds
+        delay_between_cycles_min *= 60
+        delay_between_cycles_max *= 60
+        
+    except ValueError:
+        print(Fore.RED + "❌ Invalid delay values, using defaults")
+        delay_between_groups_min = 15
+        delay_between_groups_max = 30
+        delay_between_sessions_min = 10
+        delay_between_sessions_max = 20
+        delay_between_cycles_min = 300  # 5 minutes
+        delay_between_cycles_max = 600  # 10 minutes
+    
+    # Ask for total cycles
+    try:
+        total_cycles = int(input(Fore.YELLOW + "🔄 Enter total number of cycles to run (0 for unlimited): ").strip() or "0")
+    except:
+        total_cycles = 0
+    
+    groups_file = "groups.txt"
+    if not os.path.exists(groups_file):
+        print(Fore.RED + f"❌ {groups_file} not found!")
+        print(Fore.YELLOW + "Create 'groups.txt' with group usernames (one per line)")
+        return
+    
+    with open(groups_file, 'r') as f:
+        all_groups = [line.strip() for line in f if line.strip()]
+    
+    if not all_groups:
+        print(Fore.RED + "❌ No group usernames in file!")
+        return
+    
+    print(Fore.GREEN + f"✅ Found {len(all_groups)} total groups in {groups_file}")
+    
+    session_files = glob.glob(os.path.join(ACCOUNTS_FOLDER, '*.session'))
+    
+    if not session_files:
+        print(Fore.RED + f"❌ No .session files found!")
+        return
+    
+    available_sessions = []
+    for session_file in session_files:
+        session_name = os.path.basename(session_file).replace('.session', '')
+        available_sessions.append((session_name, session_file))
+    
+    print(Fore.GREEN + f"✅ Found {len(available_sessions)} sessions in accounts folder")
+    
+    for i, (session_name, session_file) in enumerate(available_sessions, 1):
+        print(Fore.CYAN + f"   {i:2d}. {session_name}")
+    
+    print(Fore.YELLOW + "\n" + "─" * 40)
+    print(Fore.CYAN + "📝 Select sessions to join groups")
+    selection = input(Fore.CYAN + "   Enter session numbers (comma-separated) or 'all': ").strip().lower()
+    
+    if selection == 'all':
+        selected_sessions = available_sessions
+    else:
+        try:
+            indices = [int(x.strip()) - 1 for x in selection.split(',')]
+            selected_sessions = [available_sessions[i] for i in indices if 0 <= i < len(available_sessions)]
+        except:
+            print(Fore.RED + "❌ Invalid selection")
+            return
+    
+    if not selected_sessions:
+        print(Fore.RED + "❌ No sessions selected!")
+        return
+    
+    # Ask for groups per session per cycle
+    try:
+        groups_per_session_per_cycle = int(input(Fore.YELLOW + "🎯 Enter number of groups per session per cycle: ").strip() or "5")
+        if groups_per_session_per_cycle < 1:
+            groups_per_session_per_cycle = 5
+    except:
+        groups_per_session_per_cycle = 5
+    
+    # Ask for mode
+    print(Fore.YELLOW + "\n📊 DISTRIBUTION MODE:")
+    print(Fore.WHITE + "   1. 🎯 Fixed groups per session (same groups each cycle)")
+    print(Fore.WHITE + "   2. 🔄 Different groups each cycle (recommended)")
+    
+    mode_choice = input(Fore.CYAN + "   Select mode (1-2): ").strip()
+    
+    if mode_choice == "1":
+        # Fixed groups mode
+        session_groups = {}
+        total_needed = groups_per_session_per_cycle * len(selected_sessions)
+        
+        if total_needed > len(all_groups):
+            print(Fore.RED + f"❌ Not enough groups! Need {total_needed}, have {len(all_groups)}")
+            return
+        
+        # Distribute groups evenly
+        for idx, (session_name, _) in enumerate(selected_sessions):
+            start_idx = idx * groups_per_session_per_cycle
+            end_idx = start_idx + groups_per_session_per_cycle
+            session_groups[session_name] = all_groups[start_idx:end_idx]
+        
+        print(Fore.GREEN + f"\n📊 FIXED DISTRIBUTION:")
+        for session_name, groups in session_groups.items():
+            print(Fore.CYAN + f"   {session_name}: {len(groups)} groups")
+        
+    else:
+        # Different groups each cycle mode
+        print(Fore.GREEN + f"\n📊 DIFFERENT GROUPS EACH CYCLE:")
+        print(Fore.YELLOW + f"   Each session will get {groups_per_session_per_cycle} NEW groups each cycle")
+        print(Fore.YELLOW + f"   Total available groups: {len(all_groups)}")
+        
+        if groups_per_session_per_cycle * len(selected_sessions) > len(all_groups):
+            print(Fore.RED + f"❌ Not enough groups for one cycle! Need {groups_per_session_per_cycle * len(selected_sessions)}, have {len(all_groups)}")
+            return
+    
+    confirm = input(Fore.YELLOW + f"\n⚠️  Start joining groups? (y/n): ").strip().lower()
+    if confirm != 'y':
+        print(Fore.YELLOW + "⏹️ Cancelled")
+        return
+    
+    print(Fore.GREEN + f"\n⚡ STARTING AUTOMATIC GROUP JOINING...\n")
+    print(Fore.YELLOW + f"⏱️  Delays: {delay_between_groups_min}-{delay_between_groups_max}s between groups, {delay_between_sessions_min}-{delay_between_sessions_max}s between sessions")
+    print(Fore.YELLOW + f"🔄 Cycles: {'Unlimited' if total_cycles == 0 else total_cycles}")
+    
+    cycle_count = 0
+    total_joined_all = 0
+    total_attempted_all = 0
+    
+    # Track used groups for mode 2
+    used_groups = set()
+    
+    try:
+        while True:
+            if total_cycles > 0 and cycle_count >= total_cycles:
+                print(Fore.GREEN + f"\n✅ REACHED MAXIMUM CYCLES: {total_cycles}")
+                break
+            
+            cycle_count += 1
+            print(Fore.MAGENTA + "\n" + "═" * 60)
+            print(Fore.MAGENTA + f"🔄 STARTING CYCLE {cycle_count}")
+            print(Fore.MAGENTA + "═" * 60)
+            
+            # Prepare groups for this cycle
+            if mode_choice == "1":
+                # Fixed groups mode - use same groups each cycle
+                cycle_session_groups = session_groups.copy()
+            else:
+                # Different groups each cycle mode
+                cycle_session_groups = {}
+                available_for_cycle = [g for g in all_groups if g not in used_groups]
+                
+                if len(available_for_cycle) < groups_per_session_per_cycle * len(selected_sessions):
+                    print(Fore.YELLOW + f"⚠️  Not enough unused groups for cycle {cycle_count}")
+                    print(Fore.YELLOW + f"   Available: {len(available_for_cycle)}, Needed: {groups_per_session_per_cycle * len(selected_sessions)}")
+                    break
+                
+                # Distribute available groups to sessions
+                for idx, (session_name, _) in enumerate(selected_sessions):
+                    start_idx = idx * groups_per_session_per_cycle
+                    end_idx = start_idx + groups_per_session_per_cycle
+                    cycle_session_groups[session_name] = available_for_cycle[start_idx:end_idx]
+                    
+                    # Mark these groups as used
+                    for group in cycle_session_groups[session_name]:
+                        used_groups.add(group)
+            
+            cycle_joined = 0
+            cycle_attempted = 0
+            
+            for idx, (session_name, session_file) in enumerate(selected_sessions, 1):
+                print(Fore.MAGENTA + f"\n📱 Processing session {idx}/{len(selected_sessions)}: {session_name}")
+                
+                # Get this session's groups for this cycle
+                groups_for_session = cycle_session_groups.get(session_name, [])
+                if not groups_for_session:
+                    print(Fore.YELLOW + f"[{session_name}] ⚠️ No groups assigned for this cycle")
+                    continue
+                
+                print(Fore.CYAN + f"[{session_name}] 📊 Joining {len(groups_for_session)} groups")
+                
+                joined, attempted = await join_groups_for_session(
+                    session_file, 
+                    session_name, 
+                    groups_for_session,
+                    delay_between_groups_min,
+                    delay_between_groups_max
+                )
+                cycle_joined += joined
+                cycle_attempted += attempted
+                total_joined_all += joined
+                total_attempted_all += attempted
+                
+                # DELAY BETWEEN SESSIONS
+                if idx < len(selected_sessions):
+                    delay = random.uniform(delay_between_sessions_min, delay_between_sessions_max)
+                    print(Fore.BLUE + f"\n⏳ Waiting {delay:.1f}s before starting next session...")
+                    await asyncio.sleep(delay)
+            
+            print(Fore.GREEN + f"\n✅ CYCLE {cycle_count} COMPLETED!")
+            print(Fore.YELLOW + f"📊 Cycle Results: {cycle_joined}/{cycle_attempted} group joins successful")
+            print(Fore.YELLOW + f"📊 Total Results: {total_joined_all}/{total_attempted_all} group joins successful")
+            
+            # Check if we should continue
+            if total_cycles > 0 and cycle_count >= total_cycles:
+                print(Fore.GREEN + f"\n✅ REACHED MAXIMUM CYCLES: {total_cycles}")
+                break
+            
+            if mode_choice == "2":
+                # Check if we have enough groups for next cycle
+                available_for_next = len(all_groups) - len(used_groups)
+                needed_for_next = groups_per_session_per_cycle * len(selected_sessions)
+                
+                if available_for_next < needed_for_next:
+                    print(Fore.YELLOW + f"\n⚠️  NOT ENOUGH GROUPS FOR NEXT CYCLE!")
+                    print(Fore.YELLOW + f"   Available: {available_for_next}, Needed: {needed_for_next}")
+                    break
+            
+            # DELAY BETWEEN CYCLES
+            delay = random.uniform(delay_between_cycles_min, delay_between_cycles_max)
+            minutes = delay / 60
+            print(Fore.BLUE + f"\n⏳ Waiting {minutes:.1f} minutes before next cycle...")
+            await asyncio.sleep(delay)
+    
+    except KeyboardInterrupt:
+        print(Fore.YELLOW + f"\n\n⏹️ AUTOMATIC JOINING STOPPED BY USER")
+    
+    print(Fore.CYAN + "\n" + "═" * 60)
+    print(Fore.YELLOW + f"📊 FINAL RESULTS:")
+    print(Fore.YELLOW + f"   Total cycles completed: {cycle_count}")
+    print(Fore.YELLOW + f"   Total joins successful: {total_joined_all}/{total_attempted_all}")
+    print(Fore.YELLOW + f"   Success rate: {(total_joined_all/total_attempted_all*100 if total_attempted_all > 0 else 0):.1f}%")
+    print(Fore.CYAN + "═" * 60)
+
+async def terminate_other_sessions(session_path, session_name):
+    """Terminate all other active sessions except current one"""
+    client = None
+    try:
+        api_creds = get_rotated_api()
+        client = TelegramClient(session_path, api_creds['api_id'], api_creds['api_hash'])
+        
+        await client.connect()
+        
+        if not await client.is_user_authorized():
+            print(Fore.RED + f"[{session_name}] ❌ Session not authorized")
+            return False
+        
+        me = await client.get_me()
+        print(Fore.GREEN + f"[{session_name}] 👤 Account: @{me.username or me.first_name}")
+        
+        # Get all active sessions
+        result = await client(functions.account.GetAuthorizationsRequest())
+        
+        # Count total sessions
+        total_sessions = len(result.authorizations)
+        print(Fore.YELLOW + f"[{session_name}] 📱 Found {total_sessions} active sessions")
+        
+        if total_sessions <= 1:
+            print(Fore.YELLOW + f"[{session_name}] ⚠️ Only current session active, nothing to terminate")
+            return True
+        
+        # Terminate all other sessions
+        terminated = 0
+        for auth in result.authorizations:
+            if auth.current:
+                continue
+            
+            try:
+                await client(functions.account.ResetAuthorizationRequest(hash=auth.hash))
+                terminated += 1
+                print(Fore.GREEN + f"[{session_name}] ✅ Terminated session from {auth.device_model}")
+                
+                await asyncio.sleep(1)
+                
+            except Exception as e:
+                print(Fore.RED + f"[{session_name}] ❌ Failed to terminate session: {str(e)[:50]}")
+        
+        print(Fore.GREEN + f"[{session_name}] ✅ Terminated {terminated}/{total_sessions-1} other sessions")
+        return True
+        
+    except Exception as e:
+        print(Fore.RED + f"[{session_name}] ❌ Error: {str(e)[:50]}")
+        return False
+    finally:
+        if client:
+            await client.disconnect()
+
+async def option12_terminate_sessions():
+    """Terminate other active sessions"""
+    display_banner()
+    print(Fore.CYAN + "\n" + "═" * 60)
+    print(Fore.GREEN + "🚫 TERMINATE OTHER SESSIONS")
+    print(Fore.CYAN + "═" * 60)
+    
+    print(Fore.YELLOW + "\n⚠️  This will log out all other active sessions (web, mobile, etc.)")
+    print(Fore.YELLOW + "   Only the current session files will remain active")
+    
+    session_files = glob.glob(os.path.join(ACCOUNTS_FOLDER, '*.session'))
+    
+    if not session_files:
+        print(Fore.RED + f"❌ No .session files found!")
+        return
+    
+    available_sessions = []
+    for session_file in session_files:
+        session_name = os.path.basename(session_file).replace('.session', '')
+        available_sessions.append((session_name, session_file))
+    
+    print(Fore.GREEN + f"✅ Found {len(available_sessions)} sessions in accounts folder")
+    
+    for i, (session_name, session_file) in enumerate(available_sessions, 1):
+        print(Fore.CYAN + f"   {i:2d}. {session_name}")
+    
+    print(Fore.YELLOW + "\n" + "─" * 40)
+    print(Fore.CYAN + "📝 Select sessions to terminate other sessions")
+    selection = input(Fore.CYAN + "   Enter session numbers (comma-separated) or 'all': ").strip().lower()
+    
+    if selection == 'all':
+        selected_sessions = available_sessions
+    else:
+        try:
+            indices = [int(x.strip()) - 1 for x in selection.split(',')]
+            selected_sessions = [available_sessions[i] for i in indices if 0 <= i < len(available_sessions)]
+        except:
+            print(Fore.RED + "❌ Invalid selection")
+            return
+    
+    if not selected_sessions:
+        print(Fore.RED + "❌ No sessions selected!")
+        return
+    
+    confirm = input(Fore.RED + f"\n⚠️ ⚠️  TERMINATE ALL OTHER SESSIONS FOR {len(selected_sessions)} ACCOUNTS? (type 'YES' to confirm): ").strip()
+    if confirm != 'YES':
+        print(Fore.YELLOW + "⏹️ Cancelled")
+        return
+    
+    print(Fore.GREEN + f"\n⚡ TERMINATING OTHER SESSIONS FOR {len(selected_sessions)} ACCOUNTS...\n")
+    
+    tasks = []
+    for session_name, session_file in selected_sessions:
+        tasks.append(terminate_other_sessions(session_file, session_name))
+    
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    success_count = sum(1 for r in results if r is True)
+    
+    print(Fore.CYAN + "\n" + "═" * 60)
+    print(Fore.YELLOW + f"📊 RESULTS: {success_count}/{len(selected_sessions)} accounts processed")
+    print(Fore.CYAN + "═" * 60)
+
+# ==================== END NEW OPTIONS FROM SEX.PY ====================
+
 def show_main_menu():
     display_banner()
     display_stats()
@@ -1621,16 +2388,20 @@ def show_main_menu():
     print(Fore.WHITE + "   4. 🔧 Session Creator (API Rotation)")
     print(Fore.WHITE + "   5. 👤 Name Changer")
     print(Fore.WHITE + "   6. 📝 Bio Changer")
-    print(Fore.WHITE + "   7. 📩 DM Forwarder (Copy-Paste)")  # New option added here
-    print(Fore.WHITE + "   8. 🔄 Channel Forwarder")  # Changed from option 7
-    print(Fore.WHITE + "   9. 🚪 Exit")  # Updated exit option number
+    print(Fore.WHITE + "   7. 📩 DM Forwarder (Copy-Paste)")
+    print(Fore.WHITE + "   8. 🔄 Channel Forwarder")
+    print(Fore.WHITE + "   9. ✅ Check Session Validity")
+    print(Fore.WHITE + "   10. 🔐 POWERFUL 2FA Password Manager")
+    print(Fore.WHITE + "   11. 👥 Join Groups (from groups.txt - AUTOMATIC CYCLES)")
+    print(Fore.WHITE + "   12. 🚫 Terminate Other Sessions")
+    print(Fore.WHITE + "   13. 🚪 Exit")
     print(Fore.CYAN + "═" * 60)
     
     try:
-        choice = input(Fore.GREEN + "\n   Select option (1-9): ").strip()
+        choice = input(Fore.GREEN + "\n   Select option (1-13): ").strip()
         return choice
     except KeyboardInterrupt:
-        return "9"
+        return "13"
 
 async def main():
     if not check_internet_connection():
@@ -1668,20 +2439,36 @@ async def main():
                 await option6_bio_changer()
                 input(Fore.YELLOW + "\n   Press Enter to continue...")
             
-            elif choice == "7":  # New DM Forwarder option
+            elif choice == "7":
                 await option7_dm_forwarder()
                 input(Fore.YELLOW + "\n   Press Enter to continue...")
             
-            elif choice == "8":  # Updated Channel Forwarder option
+            elif choice == "8":
                 await option8_channel_forwarder()
                 input(Fore.YELLOW + "\n   Press Enter to continue...")
             
-            elif choice == "9":  # Updated exit option
+            elif choice == "9":
+                await option9_check_sessions()
+                input(Fore.YELLOW + "\n   Press Enter to continue...")
+            
+            elif choice == "10":
+                await option10_change_2fa()
+                input(Fore.YELLOW + "\n   Press Enter to continue...")
+            
+            elif choice == "11":
+                await option11_join_groups()
+                input(Fore.YELLOW + "\n   Press Enter to continue...")
+            
+            elif choice == "12":
+                await option12_terminate_sessions()
+                input(Fore.YELLOW + "\n   Press Enter to continue...")
+            
+            elif choice == "13":
                 print(Fore.YELLOW + "\n👋 Goodbye! See you next time!")
                 break
             
             else:
-                print(Fore.RED + "❌ Invalid choice! Please select 1-9")
+                print(Fore.RED + "❌ Invalid choice! Please select 1-13")
                 time.sleep(1)
         
         except KeyboardInterrupt:

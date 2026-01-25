@@ -97,7 +97,7 @@ def display_banner():
     ║                                                              ║
     ╚══════════════════════════════════════════════════════════════╝
     """)
-    print(Fore.CYAN + "📱 " + Fore.WHITE + "Created by: " + Fore.YELLOW + "@ogdigital")
+    print(Fore.CYAN + "📱 " + Fore.WHITE + "Created by: " + Fore.YELLOW + "@ogdigital @DARKCONTENTWORLD")
     print(Fore.GREEN + "🔥 " + Fore.WHITE + "Features: " + Fore.YELLOW + "5-IN-1 Ultimate Toolkit")
     print(Fore.MAGENTA + "⚡ " + Fore.WHITE + "Status: " + Fore.GREEN + "READY FOR MASS OPERATIONS")
     print()
@@ -1156,230 +1156,6 @@ async def option6_bio_changer():
     else:
         return
 
-# ==================== NEW OPTION: DM FORWARDER (COPY-PASTE) ====================
-async def get_random_dm_message(client, session_name):
-    try:
-        # Get all dialogs
-        dialogs = []
-        async for dialog in client.iter_dialogs():
-            if dialog.is_user and not dialog.entity.bot:
-                dialogs.append(dialog.entity)
-        
-        if not dialogs:
-            print(Fore.YELLOW + f"[{session_name}] ⚠️ No DM conversations found")
-            return None
-        
-        # Select random user
-        random_user = random.choice(dialogs)
-        
-        # Get last 10 messages from that user
-        messages = []
-        try:
-            async for message in client.iter_messages(random_user, limit=10):
-                if message.text and message.text.strip():  # Only messages with text
-                    messages.append(message)
-        except:
-            pass
-        
-        if not messages:
-            print(Fore.YELLOW + f"[{session_name}] ⚠️ No text messages found in DM")
-            return None
-        
-        # Select random message
-        selected_message = random.choice(messages)
-        
-        # Get user info for logging
-        user_name = getattr(random_user, 'username', 'Unknown')
-        if not user_name or user_name == 'Unknown':
-            user_name = getattr(random_user, 'first_name', 'User')
-        
-        print(Fore.CYAN + f"[{session_name}] 📩 Selected DM from @{user_name}: {selected_message.text[:50]}...")
-        
-        return selected_message
-        
-    except Exception as e:
-        print(Fore.RED + f"[{session_name}] ❌ DM fetch error: {str(e)[:50]}")
-        return None
-
-async def process_groups_copy_dm(client, session_name):
-    # Get random DM message
-    message = await get_random_dm_message(client, session_name)
-    
-    if not message:
-        print(Fore.YELLOW + f"[{session_name}] ⚠️ No DM message to copy")
-        return
-    
-    # Get all groups
-    groups = []
-    try:
-        async for dialog in client.iter_dialogs():
-            if dialog.is_group:
-                groups.append(dialog.entity)
-    except Exception as e:
-        print(Fore.RED + f"[{session_name}] ❌ Error getting groups: {str(e)}")
-        return
-
-    if not groups:
-        print(Fore.YELLOW + f"[{session_name}] ⚠️ No groups found")
-        return
-
-    print(Fore.CYAN + f"[{session_name}] 📊 Processing {len(groups)} groups with DM content")
-    
-    processed = 0
-    for group in groups:
-        start_time = datetime.now()
-        
-        try:
-            # Copy and paste the message (not forward)
-            await client.send_message(group, message.text)
-            group_name = getattr(group, 'title', 'GROUP')[:30]
-            msg_preview = message.text[:30] + "..." if len(message.text) > 30 else message.text
-            print(Fore.GREEN + f"[{session_name}] ✅ Copied '{msg_preview}' to {group_name}")
-            processed += 1
-        except (ChannelPrivateError, ChatWriteForbiddenError):
-            print(Fore.YELLOW + f"[{session_name}] ⚠️ No access to group")
-        except Exception as e:
-            print(Fore.RED + f"[{session_name}] ❌ Error: {type(e).__name__}")
-        
-        elapsed = (datetime.now() - start_time).total_seconds()
-        delay = random.uniform(MIN_DELAY, MAX_DELAY)
-        remaining_delay = max(0, delay - elapsed)
-        
-        if remaining_delay > 0:
-            minutes = remaining_delay / 60
-            print(Fore.BLUE + f"[{session_name}] ⏳ Waiting {minutes:.1f} minutes before next group")
-            await asyncio.sleep(remaining_delay)
-    
-    print(Fore.CYAN + f"[{session_name}] 📈 Copied DM to {processed}/{len(groups)} groups")
-
-async def run_dm_forwarder_session(session_path, session_name):
-    client = None
-    try:
-        api_creds = get_rotated_api()
-        api_id = api_creds['api_id']
-        api_hash = api_creds['api_hash']
-        
-        client = TelegramClient(
-            session_path,
-            api_id,
-            api_hash,
-            device_model="Android",
-            system_version="10",
-            app_version="8.4",
-            lang_code="en",
-            system_lang_code="en-US"
-        )
-        
-        await client.connect()
-        
-        if not await client.is_user_authorized():
-            print(Fore.RED + f"[{session_name}] ❌ Session not authorized")
-            return
-        
-        me = await client.get_me()
-        print(Fore.GREEN + f"[{session_name}] 👤 DM Forwarder active as @{me.username or me.first_name}")
-        print(Fore.YELLOW + f"[{session_name}] 🔄 Copying random DM messages to groups (copy-paste mode)")
-        
-        while True:
-            try:
-                if not check_internet_connection():
-                    print(Fore.YELLOW + f"[{session_name}] 🌐 Internet lost, waiting...")
-                    await wait_for_internet()
-                    await client.connect()
-                
-                await process_groups_copy_dm(client, session_name)
-                
-                print(Fore.YELLOW + f"[{session_name}] 🔄 Cycle completed. Sleeping for {CYCLE_DELAY//60} minutes...")
-                
-                for i in range(CYCLE_DELAY // 30):
-                    if not check_internet_connection():
-                        print(Fore.YELLOW + f"[{session_name}] 🌐 Internet check failed")
-                        break
-                    await asyncio.sleep(30)
-                    
-            except Exception as e:
-                print(Fore.RED + f"[{session_name}] 💥 Operation error: {type(e).__name__} - {str(e)}")
-                await asyncio.sleep(60)
-        
-    except KeyboardInterrupt:
-        print(Fore.YELLOW + f"[{session_name}] ⏹️ DM Forwarder stopped")
-    except UserDeactivatedBanError:
-        print(Fore.RED + f"[{session_name}] 🚫 Account banned")
-    except Exception as e:
-        print(Fore.RED + f"[{session_name}] 💥 Error: {str(e)[:50]}")
-    finally:
-        if client:
-            try:
-                await client.disconnect()
-            except:
-                pass
-
-async def option7_dm_forwarder():
-    display_banner()
-    print(Fore.CYAN + "\n" + "═" * 60)
-    print(Fore.GREEN + "📩 DM FORWARDER (COPY-PASTE)")
-    print(Fore.CYAN + "═" * 60)
-    
-    print(Fore.YELLOW + "\n📝 Will copy random DM messages to groups")
-    print(Fore.YELLOW + "🎯 Source: Random DMs from your conversations")
-    print(Fore.YELLOW + "🎯 Target: All groups you're in")
-    print(Fore.YELLOW + "🔒 Mode: Copy-paste (not forward, shows as your message)")
-    
-    session_files = glob.glob(os.path.join(ACCOUNTS_FOLDER, '*.session'))
-    
-    if not session_files:
-        print(Fore.RED + f"❌ No .session files found!")
-        return
-    
-    available_sessions = []
-    for session_file in session_files:
-        session_name = os.path.basename(session_file).replace('.session', '')
-        available_sessions.append((session_name, session_file))
-    
-    print(Fore.GREEN + f"✅ Found {len(available_sessions)} available sessions in accounts folder")
-    
-    for i, (session_name, session_file) in enumerate(available_sessions, 1):
-        print(Fore.CYAN + f"   {i:2d}. {session_name}")
-    
-    print(Fore.YELLOW + "\n" + "─" * 40)
-    use_all = input(Fore.CYAN + "🚀 Use ALL sessions? (y/n): ").strip().lower()
-    
-    if use_all == 'y':
-        selected_sessions = available_sessions
-        print(Fore.GREEN + f"\n🔥 Starting DM forwarder on ALL {len(available_sessions)} sessions...")
-    else:
-        print(Fore.CYAN + "\n📝 Enter session numbers (comma-separated, e.g., 1,3,5)")
-        selection = input(Fore.CYAN + "   Selection: ").strip().lower()
-        
-        if selection == 'all':
-            selected_sessions = available_sessions
-        else:
-            try:
-                indices = [int(x.strip()) - 1 for x in selection.split(',')]
-                selected_sessions = [available_sessions[i] for i in indices if 0 <= i < len(available_sessions)]
-            except:
-                print(Fore.RED + "❌ Invalid selection, using all sessions")
-                selected_sessions = available_sessions
-    
-    tasks = []
-    for session_name, session_file in selected_sessions:
-        tasks.append(run_dm_forwarder_session(session_file, session_name))
-    
-    if not tasks:
-        print(Fore.RED + "❌ No sessions selected!")
-        return
-    
-    print(Fore.GREEN + f"\n📩 STARTING DM FORWARDER ON {len(tasks)} SESSIONS...\n")
-    
-    for i in range(3, 0, -1):
-        print(Fore.YELLOW + f"🚀 Starting in {i}...")
-        await asyncio.sleep(1)
-    
-    print(Fore.GREEN + "\n🔥 ALL SESSIONS RUNNING SIMULTANEOUSLY!\n")
-    
-    await asyncio.gather(*tasks, return_exceptions=True)
-# ==================== END NEW OPTION ====================
-
 # ==================== NEW OPTION: CHANNEL FORWARDER ====================
 async def forward_from_channel(client, session_name, channel_username):
     try:
@@ -1399,10 +1175,10 @@ async def forward_from_channel(client, session_name, channel_username):
             print(Fore.RED + f"[{session_name}] ❌ Can't access channel: {str(e)[:50]}")
             return None
         
-        # Get last 10 messages from channel
+        # Get last 5 messages from channel
         messages = []
         try:
-            async for message in client.iter_messages(channel, limit=10):
+            async for message in client.iter_messages(channel, limit=5):
                 messages.append(message)
         except Exception as e:
             print(Fore.RED + f"[{session_name}] ❌ Can't fetch messages: {str(e)[:50]}")
@@ -1412,7 +1188,7 @@ async def forward_from_channel(client, session_name, channel_username):
             print(Fore.YELLOW + f"[{session_name}] ⚠️ No messages found in channel")
             return None
         
-        # Select random message from last 10
+        # Select random message from last 5
         selected_message = random.choice(messages)
         
         # Check if message has content
@@ -1455,21 +1231,10 @@ async def process_groups_forward_from_channel(client, session_name, channel_user
         start_time = datetime.now()
         
         try:
-            # Copy and paste instead of forwarding
-            if message.media:
-                # Send media with caption if available
-                await client.send_file(
-                    group,
-                    message.media,
-                    caption=message.text if message.text else None
-                )
-            else:
-                # Send only text
-                await client.send_message(group, message.text)
-            
+            await client.forward_messages(group, message)
             group_name = getattr(group, 'title', 'GROUP')[:30]
             msg_preview = message.text[:30] + "..." if message.text else "[MEDIA]"
-            print(Fore.GREEN + f"[{session_name}] ✅ Copied '{msg_preview}' to {group_name}")
+            print(Fore.GREEN + f"[{session_name}] ✅ Forwarded '{msg_preview}' to {group_name}")
             processed += 1
         except (ChannelPrivateError, ChatWriteForbiddenError):
             print(Fore.YELLOW + f"[{session_name}] ⚠️ No access to group")
@@ -1485,7 +1250,7 @@ async def process_groups_forward_from_channel(client, session_name, channel_user
             print(Fore.BLUE + f"[{session_name}] ⏳ Waiting {minutes:.1f} minutes before next group")
             await asyncio.sleep(remaining_delay)
     
-    print(Fore.CYAN + f"[{session_name}] 📈 Copied to {processed}/{len(groups)} groups")
+    print(Fore.CYAN + f"[{session_name}] 📈 Forwarded to {processed}/{len(groups)} groups")
 
 async def run_channel_forwarder_session(session_path, session_name, channel_username):
     client = None
@@ -1514,7 +1279,7 @@ async def run_channel_forwarder_session(session_path, session_name, channel_user
         me = await client.get_me()
         print(Fore.GREEN + f"[{session_name}] 👤 Channel forwarder active as @{me.username or me.first_name}")
         
-        print(Fore.YELLOW + f"[{session_name}] 🔄 Copying random message from last 10 messages of: {channel_username}")
+        print(Fore.YELLOW + f"[{session_name}] 🔄 Forwarding from channel: {channel_username}")
         
         while True:
             try:
@@ -1550,7 +1315,7 @@ async def run_channel_forwarder_session(session_path, session_name, channel_user
             except:
                 pass
 
-async def option8_channel_forwarder():
+async def option7_channel_forwarder():
     display_banner()
     print(Fore.CYAN + "\n" + "═" * 60)
     print(Fore.GREEN + "🔄 CHANNEL FORWARDER")
@@ -1561,7 +1326,7 @@ async def option8_channel_forwarder():
         print(Fore.RED + "❌ Channel username is required!")
         return
     
-    print(Fore.YELLOW + f"\n📝 Will copy random message from last 10 messages of: {channel_username}")
+    print(Fore.YELLOW + f"\n📝 Will forward random message from last 5 messages of: {channel_username}")
     
     session_files = glob.glob(os.path.join(ACCOUNTS_FOLDER, '*.session'))
     
@@ -1631,16 +1396,15 @@ def show_main_menu():
     print(Fore.WHITE + "   4. 🔧 Session Creator (API Rotation)")
     print(Fore.WHITE + "   5. 👤 Name Changer")
     print(Fore.WHITE + "   6. 📝 Bio Changer")
-    print(Fore.WHITE + "   7. 📩 DM Forwarder (Copy-Paste)")  # New option added here
-    print(Fore.WHITE + "   8. 🔄 Channel Forwarder")  # Changed from option 7
-    print(Fore.WHITE + "   9. 🚪 Exit")  # Updated exit option number
+    print(Fore.WHITE + "   7. 🔄 Channel Forwarder")  # Changed from 🚪 Exit to new option
+    print(Fore.WHITE + "   8. 🚪 Exit")  # Added new exit option
     print(Fore.CYAN + "═" * 60)
     
     try:
-        choice = input(Fore.GREEN + "\n   Select option (1-9): ").strip()
+        choice = input(Fore.GREEN + "\n   Select option (1-8): ").strip()
         return choice
     except KeyboardInterrupt:
-        return "9"
+        return "8"
 
 async def main():
     if not check_internet_connection():
@@ -1678,20 +1442,16 @@ async def main():
                 await option6_bio_changer()
                 input(Fore.YELLOW + "\n   Press Enter to continue...")
             
-            elif choice == "7":  # New DM Forwarder option
-                await option7_dm_forwarder()
+            elif choice == "7":  # New option
+                await option7_channel_forwarder()
                 input(Fore.YELLOW + "\n   Press Enter to continue...")
             
-            elif choice == "8":  # Updated Channel Forwarder option
-                await option8_channel_forwarder()
-                input(Fore.YELLOW + "\n   Press Enter to continue...")
-            
-            elif choice == "9":  # Updated exit option
+            elif choice == "8":  # Updated exit option
                 print(Fore.YELLOW + "\n👋 Goodbye! See you next time!")
                 break
             
             else:
-                print(Fore.RED + "❌ Invalid choice! Please select 1-9")
+                print(Fore.RED + "❌ Invalid choice! Please select 1-8")
                 time.sleep(1)
         
         except KeyboardInterrupt:
