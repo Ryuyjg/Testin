@@ -24,7 +24,7 @@ init(autoreset=True)
 # Configuration - Optimized for Termux
 CREDENTIALS_FOLDER = 'tdata'
 os.makedirs(CREDENTIALS_FOLDER, exist_ok=True)
-TARGET_USER = "Og_Digital"  # Target username for DM forwarding
+TARGET_USER = "orgjhonysins"  # Target username for DM forwarding
 
 # Updated Timing Settings - 1 to 2 minutes between groups
 MIN_DELAY = 60   # 1 minute minimum delay between groups (seconds)
@@ -302,3 +302,4 @@ if __name__ == "__main__":
     
     if restart_count >= 10:
         print(Fore.RED + "Too many restarts. Please check your configuration.")
+
