@@ -33,21 +33,8 @@ import struct
 init(autoreset=True)
 
 # ==================== CONFIGURATION ====================
-ACCOUNTS_FOLDER = 'accounts'
-SESSIONS_FOLDER = 'sessions'
-os.makedirs(ACCOUNTS_FOLDER, exist_ok=True)
-os.makedirs(SESSIONS_FOLDER, exist_ok=True)
-
-API_CREDENTIALS = [
-    {"api_id": 30645628, "api_hash": "7e0519fe42ea9c18d8ee0382f621042d"},
-    {"api_id": 30808688, "api_hash": "1349dabd9280694bd939951963258729"},
-    {"api_id": 36898273, "api_hash": "1ae96cb5ab3d4601cd147b4b58ceb2b4"},
-    {"api_id": 39357850, "api_hash": "ad4559302ff6ea47c20f0d42b32099c1"},
-    {"api_id": 35583095, "api_hash": "30b24cfdabf6862ac9e68ef2037fbf1c"},
-    {"api_id": 39532169, "api_hash": "d3bb92ae9bd86de82eff01a834e29cf7"},
-    {"api_id": 2040, "api_hash": "b18441a1ff607e10a989891a5462e627"},
-    {"api_id": 38512195, "api_hash": "2154b7e5bcad8fed4ac2a44fb87be0b4"}
-]
+STRINGS_FOLDER = 'strings'
+os.makedirs(STRINGS_FOLDER, exist_ok=True)
 
 MIN_DELAY = 60
 MAX_DELAY = 120
@@ -60,9 +47,6 @@ SPAM_MESSAGE = "for buy ott and tg softwares dm @ogdigital"
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
-
-def get_rotated_api():
-    return random.choice(API_CREDENTIALS)
 
 def check_internet_connection(host="8.8.8.8", port=53, timeout=5):
     try:
@@ -78,10 +62,62 @@ async def wait_for_internet():
         await asyncio.sleep(10)
     print(Fore.GREEN + "✅ Internet connection available!")
 
-def clean_phone_for_filename(phone):
-    clean = phone.replace('+', '').replace(' ', '').replace('-', '')
-    clean = ''.join(filter(str.isdigit, clean))
-    return clean
+def load_string_sessions():
+    """Load string sessions from strings.txt file - FIXED VERSION"""
+    strings_file = os.path.join(STRINGS_FOLDER, 'strings.txt')
+    
+    if not os.path.exists(strings_file):
+        print(Fore.RED + f"❌ {strings_file} not found!")
+        return []
+    
+    sessions = []
+    try:
+        with open(strings_file, 'r', encoding='utf-8') as f:
+            content = f.read().strip()
+        
+        # Split by lines and remove empty lines
+        lines = [line.strip() for line in content.split('\n') if line.strip()]
+        
+        # Parse sessions: each session has exactly 3 lines (api_id, api_hash, session_string)
+        session_count = 0
+        for i in range(0, len(lines), 3):
+            if i + 2 < len(lines):
+                api_id_line = lines[i]
+                api_hash_line = lines[i + 1]
+                session_string_line = lines[i + 2]
+                
+                # Validate the data
+                if not api_id_line.isdigit():
+                    print(Fore.RED + f"❌ Line {i+1}: Invalid API ID '{api_id_line}'")
+                    continue
+                
+                if len(api_hash_line) != 32:
+                    print(Fore.RED + f"❌ Line {i+2}: Invalid API hash length")
+                    continue
+                
+                if len(session_string_line) < 100:
+                    print(Fore.RED + f"❌ Line {i+3}: Session string too short")
+                    continue
+                
+                try:
+                    sessions.append({
+                        "api_id": int(api_id_line),
+                        "api_hash": api_hash_line,
+                        "session_string": session_string_line,
+                        "name": f"string_{session_count+1}"
+                    })
+                    session_count += 1
+                    print(Fore.GREEN + f"✅ Loaded session {session_count}")
+                except Exception as e:
+                    print(Fore.RED + f"❌ Error parsing session: {str(e)}")
+                    continue
+        
+        print(Fore.GREEN + f"✅ Successfully loaded {len(sessions)} string sessions from {strings_file}")
+        return sessions
+        
+    except Exception as e:
+        print(Fore.RED + f"❌ Error loading string sessions: {str(e)}")
+        return []
 
 def display_banner():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -107,13 +143,10 @@ def display_banner():
     print()
 
 def display_stats():
-    session_files = glob.glob(os.path.join(SESSIONS_FOLDER, '*.session'))
-    account_files = glob.glob(os.path.join(ACCOUNTS_FOLDER, '*.session'))
+    sessions = load_string_sessions()
     
     print(Fore.CYAN + "📊 " + Fore.WHITE + "Session Stats:")
-    print(Fore.YELLOW + f"   • Account Sessions: {len(account_files)}")
-    print(Fore.YELLOW + f"   • Session Files: {len(session_files)}")
-    print(Fore.YELLOW + f"   • Available APIs: {len(API_CREDENTIALS)}")
+    print(Fore.YELLOW + f"   • String Sessions: {len(sessions)}")
 
 async def send_direct_message(client, target_username, message_text, session_name):
     try:
@@ -131,17 +164,13 @@ async def send_direct_message(client, target_username, message_text, session_nam
         print(Fore.RED + f"[{session_name}] ❌ Failed to send to @{target_username}: {error_msg}")
         return False
 
-async def send_dm_from_session(session_path, session_name, target_username, message_text):
+async def send_dm_from_session(session_data, session_name, target_username, message_text):
     client = None
     try:
-        api_creds = get_rotated_api()
-        api_id = api_creds['api_id']
-        api_hash = api_creds['api_hash']
-        
         client = TelegramClient(
-            session_path,
-            api_id,
-            api_hash,
+            StringSession(session_data["session_string"]),
+            session_data["api_id"],
+            session_data["api_hash"],
             device_model="Android",
             system_version="10",
             app_version="8.4",
@@ -192,22 +221,21 @@ async def option1_direct_messager():
         print(Fore.RED + "❌ Message is required!")
         return
     
-    session_files = glob.glob(os.path.join(ACCOUNTS_FOLDER, '*.session'))
+    available_sessions = load_string_sessions()
     
-    if not session_files:
-        print(Fore.RED + f"❌ No .session files found in '{ACCOUNTS_FOLDER}/' folder!")
-        print(Fore.YELLOW + f"Place your .session files in the '{ACCOUNTS_FOLDER}/' folder")
+    if not available_sessions:
+        print(Fore.RED + f"❌ No string sessions found in '{STRINGS_FOLDER}/strings.txt'!")
+        print(Fore.YELLOW + f"Add your string sessions to '{STRINGS_FOLDER}/strings.txt' in format:")
+        print(Fore.YELLOW + "api_id")
+        print(Fore.YELLOW + "api_hash")
+        print(Fore.YELLOW + "session_string")
+        print(Fore.YELLOW + "(repeat for each session)")
         return
     
-    available_sessions = []
-    for session_file in session_files:
-        session_name = os.path.basename(session_file).replace('.session', '')
-        available_sessions.append((session_name, session_file))
+    print(Fore.GREEN + f"✅ Found {len(available_sessions)} available string sessions")
     
-    print(Fore.GREEN + f"✅ Found {len(available_sessions)} available sessions in accounts folder")
-    
-    for i, (session_name, session_file) in enumerate(available_sessions, 1):
-        print(Fore.CYAN + f"   {i:2d}. {session_name}")
+    for i, session_data in enumerate(available_sessions, 1):
+        print(Fore.CYAN + f"   {i:3d}. {session_data['name']}")
     
     print(Fore.YELLOW + "\n" + "─" * 40)
     use_all = input(Fore.CYAN + "🚀 Use ALL sessions? (y/n): ").strip().lower()
@@ -231,8 +259,8 @@ async def option1_direct_messager():
                 selected_sessions = available_sessions
     
     tasks = []
-    for session_name, session_file in selected_sessions:
-        tasks.append(send_dm_from_session(session_file, session_name, target_username, message_text))
+    for session_data in selected_sessions:
+        tasks.append(send_dm_from_session(session_data, session_data['name'], target_username, message_text))
     
     if not tasks:
         print(Fore.RED + "❌ No sessions selected!")
@@ -298,17 +326,13 @@ async def process_groups(client, session_name):
     except Exception as e:
         print(Fore.RED + f"[{session_name}] 💥 Error: {str(e)[:50]}")
 
-async def run_spammer_session(session_path, session_name):
+async def run_spammer_session(session_data, session_name):
     client = None
     try:
-        api_creds = get_rotated_api()
-        api_id = api_creds['api_id']
-        api_hash = api_creds['api_hash']
-        
         client = TelegramClient(
-            session_path,
-            api_id,
-            api_hash,
+            StringSession(session_data["session_string"]),
+            session_data["api_id"],
+            session_data["api_hash"],
             device_model="Android",
             system_version="10",
             system_lang_code="en-US"
@@ -363,21 +387,16 @@ async def option2_group_spammer():
     
     print(Fore.YELLOW + f"\n🔥 Spam Message: {SPAM_MESSAGE}")
     
-    session_files = glob.glob(os.path.join(ACCOUNTS_FOLDER, '*.session'))
+    available_sessions = load_string_sessions()
     
-    if not session_files:
-        print(Fore.RED + f"❌ No .session files found!")
+    if not available_sessions:
+        print(Fore.RED + f"❌ No string sessions found!")
         return
     
-    available_sessions = []
-    for session_file in session_files:
-        session_name = os.path.basename(session_file).replace('.session', '')
-        available_sessions.append((session_name, session_file))
+    print(Fore.GREEN + f"✅ Found {len(available_sessions)} available string sessions")
     
-    print(Fore.GREEN + f"✅ Found {len(available_sessions)} available sessions in accounts folder")
-    
-    for i, (session_name, session_file) in enumerate(available_sessions, 1):
-        print(Fore.CYAN + f"   {i:2d}. {session_name}")
+    for i, session_data in enumerate(available_sessions, 1):
+        print(Fore.CYAN + f"   {i:3d}. {session_data['name']}")
     
     print(Fore.YELLOW + "\n" + "─" * 40)
     use_all = input(Fore.CYAN + "🚀 Use ALL sessions? (y/n): ").strip().lower()
@@ -400,8 +419,8 @@ async def option2_group_spammer():
                 selected_sessions = available_sessions
     
     tasks = []
-    for session_name, session_file in selected_sessions:
-        tasks.append(run_spammer_session(session_file, session_name))
+    for session_data in selected_sessions:
+        tasks.append(run_spammer_session(session_data, session_data['name']))
     
     if not tasks:
         print(Fore.RED + "❌ No sessions selected!")
@@ -471,17 +490,13 @@ async def process_groups_forward(client, session_name, message):
     
     print(Fore.CYAN + f"[{session_name}] 📈 Sent to {processed}/{len(groups)} groups")
 
-async def run_auto_reply_forwarder_session(session_path, session_name):
+async def run_auto_reply_forwarder_session(session_data, session_name):
     client = None
     try:
-        api_creds = get_rotated_api()
-        api_id = api_creds['api_id']
-        api_hash = api_creds['api_hash']
-        
         client = TelegramClient(
-            session_path,
-            api_id,
-            api_hash,
+            StringSession(session_data["session_string"]),
+            session_data["api_id"],
+            session_data["api_hash"],
             device_model="Android",
             system_version="10",
             app_version="8.4",
@@ -556,21 +571,16 @@ async def option3_auto_reply_forwarder():
     print(Fore.YELLOW + f"\n💬 Auto-reply message: {AUTO_REPLY_MESSAGE}")
     print(Fore.YELLOW + f"🎯 Forwarding from: @{TARGET_USERNAME}")
     
-    session_files = glob.glob(os.path.join(ACCOUNTS_FOLDER, '*.session'))
+    available_sessions = load_string_sessions()
     
-    if not session_files:
-        print(Fore.RED + f"❌ No .session files found!")
+    if not available_sessions:
+        print(Fore.RED + f"❌ No string sessions found!")
         return
     
-    available_sessions = []
-    for session_file in session_files:
-        session_name = os.path.basename(session_file).replace('.session', '')
-        available_sessions.append((session_name, session_file))
+    print(Fore.GREEN + f"✅ Found {len(available_sessions)} available string sessions")
     
-    print(Fore.GREEN + f"✅ Found {len(available_sessions)} available sessions in accounts folder")
-    
-    for i, (session_name, session_file) in enumerate(available_sessions, 1):
-        print(Fore.CYAN + f"   {i:2d}. {session_name}")
+    for i, session_data in enumerate(available_sessions, 1):
+        print(Fore.CYAN + f"   {i:3d}. {session_data['name']}")
     
     print(Fore.YELLOW + "\n" + "─" * 40)
     use_all = input(Fore.CYAN + "🚀 Use ALL sessions? (y/n): ").strip().lower()
@@ -593,8 +603,8 @@ async def option3_auto_reply_forwarder():
                 selected_sessions = available_sessions
     
     tasks = []
-    for session_name, session_file in selected_sessions:
-        tasks.append(run_auto_reply_forwarder_session(session_file, session_name))
+    for session_data in selected_sessions:
+        tasks.append(run_auto_reply_forwarder_session(session_data, session_data['name']))
     
     if not tasks:
         print(Fore.RED + "❌ No sessions selected!")
@@ -646,25 +656,19 @@ async def create_single_session():
         print(Fore.RED + "❌ Phone number is required!")
         return False
     
-    session_filename = clean_phone_for_filename(phone)
-    session_path = os.path.join(ACCOUNTS_FOLDER, f"{session_filename}.session")
+    api_id = input(Fore.YELLOW + "🔑 API ID: ").strip()
+    if not api_id.isdigit():
+        print(Fore.RED + "❌ Invalid API ID!")
+        return False
     
-    if os.path.exists(session_path):
-        print(Fore.YELLOW + f"⚠️ Session for {phone} already exists in accounts folder")
-        overwrite = input(Fore.YELLOW + "Overwrite? (y/n): ").strip().lower()
-        if overwrite != 'y':
-            print(Fore.YELLOW + "⏭️ Skipping")
-            return False
-    
-    api_creds = get_rotated_api()
-    api_id = api_creds['api_id']
-    api_hash = api_creds['api_hash']
-    
-    print(Fore.GREEN + f"🔑 Using API ID: {api_id}")
+    api_hash = input(Fore.YELLOW + "🔑 API Hash: ").strip()
+    if len(api_hash) != 32:
+        print(Fore.RED + "❌ Invalid API Hash (must be 32 characters)!")
+        return False
     
     client = None
     try:
-        client = TelegramClient(session_path, api_id, api_hash)
+        client = TelegramClient(StringSession(), int(api_id), api_hash)
         await client.connect()
         print(Fore.GREEN + "✅ Connected to Telegram")
         
@@ -672,8 +676,6 @@ async def create_single_session():
         if not sent_code:
             print(Fore.RED + "❌ Failed to send verification code")
             await client.disconnect()
-            if os.path.exists(session_path):
-                os.remove(session_path)
             return False
         
         phone_code_hash = sent_code.phone_code_hash
@@ -694,8 +696,6 @@ async def create_single_session():
             if otp.lower() == 's':
                 print(Fore.YELLOW + "⏭️ Skipping")
                 await client.disconnect()
-                if os.path.exists(session_path):
-                    os.remove(session_path)
                 return False
             
             if not otp.isdigit() or len(otp) != 5:
@@ -757,8 +757,6 @@ async def create_single_session():
         if not success:
             print(Fore.RED + "❌ Login failed")
             await client.disconnect()
-            if os.path.exists(session_path):
-                os.remove(session_path)
             return False
         
         try:
@@ -768,17 +766,18 @@ async def create_single_session():
             pass
         
         try:
-            session_string = StringSession.save(client.session)
-            string_filename = f"{session_filename}_string.txt"
-            string_file = os.path.join(SESSIONS_FOLDER, string_filename)
-            with open(string_file, 'w') as f:
-                f.write(session_string)
-            print(Fore.GREEN + f"📝 String session saved: {string_filename}")
+            session_string = client.session.save()
+            
+            # Save to strings.txt
+            strings_file = os.path.join(STRINGS_FOLDER, 'strings.txt')
+            with open(strings_file, 'a') as f:
+                f.write(f"{api_id}\n{api_hash}\n{session_string}\n")
+            
+            print(Fore.GREEN + f"📝 String session saved to {strings_file}")
         except:
             pass
         
         print(Fore.GREEN + f"\n🎉 Session created successfully!")
-        print(Fore.YELLOW + f"📁 Session file: {ACCOUNTS_FOLDER}/{session_filename}.session")
         
         await client.disconnect()
         return True
@@ -790,8 +789,6 @@ async def create_single_session():
                 await client.disconnect()
             except:
                 pass
-        if os.path.exists(session_path):
-            os.remove(session_path)
         return False
 
 async def bulk_create_sessions():
@@ -814,30 +811,24 @@ async def bulk_create_sessions():
     
     print(Fore.GREEN + f"✅ Found {len(phones)} phone numbers")
     
+    # Get API credentials once
+    api_id = input(Fore.YELLOW + "🔑 API ID: ").strip()
+    if not api_id.isdigit():
+        print(Fore.RED + "❌ Invalid API ID!")
+        return
+    
+    api_hash = input(Fore.YELLOW + "🔑 API Hash: ").strip()
+    if len(api_hash) != 32:
+        print(Fore.RED + "❌ Invalid API Hash (must be 32 characters)!")
+        return
+    
     success_count = 0
     for i, phone in enumerate(phones, 1):
         print(Fore.CYAN + f"\n[{i}/{len(phones)}] Processing: {phone}")
         
-        session_filename = clean_phone_for_filename(phone)
-        session_path = os.path.join(ACCOUNTS_FOLDER, f"{session_filename}.session")
-        
-        if os.path.exists(session_path):
-            print(Fore.YELLOW + f"⚠️ Session exists in accounts folder: {session_filename}.session")
-            overwrite = input(Fore.YELLOW + "Overwrite? (y/n/skip): ").strip().lower()
-            if overwrite == 'n':
-                print(Fore.YELLOW + "⏭️ Skipping")
-                continue
-            elif overwrite == 'skip':
-                print(Fore.YELLOW + "⏭️ Skipping all duplicates")
-                break
-        
-        api_creds = get_rotated_api()
-        api_id = api_creds['api_id']
-        api_hash = api_creds['api_hash']
-        
         client = None
         try:
-            client = TelegramClient(session_path, api_id, api_hash)
+            client = TelegramClient(StringSession(), int(api_id), api_hash)
             await client.connect()
             
             sent_code = await send_code_with_retry(client, phone)
@@ -886,7 +877,15 @@ async def bulk_create_sessions():
                     print(Fore.RED + f"❌ Login error: {str(e)[:50]}")
                     continue
             
-            print(Fore.GREEN + f"✅ Saved to accounts folder: {session_filename}.session")
+            # Save session string
+            session_string = client.session.save()
+            
+            # Save to strings.txt
+            strings_file = os.path.join(STRINGS_FOLDER, 'strings.txt')
+            with open(strings_file, 'a') as f:
+                f.write(f"{api_id}\n{api_hash}\n{session_string}\n")
+            
+            print(Fore.GREEN + f"✅ Saved string session")
             success_count += 1
             
             await client.disconnect()
@@ -898,8 +897,6 @@ async def bulk_create_sessions():
                     await client.disconnect()
                 except:
                     pass
-            if os.path.exists(session_path):
-                os.remove(session_path)
             continue
     
     print(Fore.CYAN + "\n" + "═" * 60)
@@ -927,17 +924,13 @@ async def option4_session_creator():
     else:
         return
 
-async def change_session_name_func(session_path, session_name, new_first_name, new_last_name=""):
+async def change_session_name_func(session_data, session_name, new_first_name, new_last_name=""):
     client = None
     try:
-        api_creds = get_rotated_api()
-        api_id = api_creds['api_id']
-        api_hash = api_creds['api_hash']
-        
         client = TelegramClient(
-            session_path,
-            api_id,
-            api_hash,
+            StringSession(session_data["session_string"]),
+            session_data["api_id"],
+            session_data["api_hash"],
             device_model="Android",
             system_version="10",
             app_version="8.4"
@@ -989,22 +982,17 @@ async def option5_name_changer():
         
         last_name = input(Fore.YELLOW + "   Enter last name (optional): ").strip()
         
-        session_files = glob.glob(os.path.join(ACCOUNTS_FOLDER, '*.session'))
+        available_sessions = load_string_sessions()
         
-        if not session_files:
-            print(Fore.RED + "❌ No .session files found!")
+        if not available_sessions:
+            print(Fore.RED + "❌ No string sessions found!")
             return
         
-        available_sessions = []
-        for session_file in session_files:
-            session_name = os.path.basename(session_file).replace('.session', '')
-            available_sessions.append((session_name, session_file))
-        
-        print(Fore.GREEN + f"✅ Found {len(available_sessions)} sessions in accounts folder")
+        print(Fore.GREEN + f"✅ Found {len(available_sessions)} string sessions")
         
         tasks = []
-        for session_name, session_file in available_sessions:
-            tasks.append(change_session_name_func(session_file, session_name, first_name, last_name))
+        for session_data in available_sessions:
+            tasks.append(change_session_name_func(session_data, session_data['name'], first_name, last_name))
         
         if tasks:
             print(Fore.GREEN + f"\n⚡ CHANGING NAMES FOR {len(tasks)} SESSIONS...\n")
@@ -1013,50 +1001,41 @@ async def option5_name_changer():
             print(Fore.GREEN + f"\n✅ COMPLETED! {success_count}/{len(tasks)} names changed successfully!")
     
     elif choice == "2":
-        session_files = glob.glob(os.path.join(ACCOUNTS_FOLDER, '*.session'))
+        available_sessions = load_string_sessions()
         
-        if not session_files:
-            print(Fore.RED + "❌ No .session files found!")
+        if not available_sessions:
+            print(Fore.RED + "❌ No string sessions found!")
             return
         
-        available_sessions = []
-        for session_file in session_files:
-            session_name = os.path.basename(session_file).replace('.session', '')
-            available_sessions.append((session_name, session_file))
+        print(Fore.GREEN + f"✅ Found {len(available_sessions)} string sessions")
         
-        print(Fore.GREEN + f"✅ Found {len(available_sessions)} sessions in accounts folder")
-        
-        for session_name, session_file in available_sessions:
-            print(Fore.CYAN + f"\n📱 Session: {session_name}")
-            first_name = input(Fore.YELLOW + f"   Enter first name for {session_name}: ").strip()
+        for session_data in available_sessions:
+            print(Fore.CYAN + f"\n📱 Session: {session_data['name']}")
+            first_name = input(Fore.YELLOW + f"   Enter first name for {session_data['name']}: ").strip()
             
             if not first_name:
                 print(Fore.YELLOW + "   ⏭️ Skipping...")
                 continue
             
-            last_name = input(Fore.YELLOW + f"   Enter last name for {session_name} (optional): ").strip()
+            last_name = input(Fore.YELLOW + f"   Enter last name for {session_data['name']} (optional): ").strip()
             
-            success = await change_session_name_func(session_file, session_name, first_name, last_name)
+            success = await change_session_name_func(session_data, session_data['name'], first_name, last_name)
             
             if success:
-                print(Fore.GREEN + f"   ✅ Name changed for {session_name}")
+                print(Fore.GREEN + f"   ✅ Name changed for {session_data['name']}")
             else:
-                print(Fore.RED + f"   ❌ Failed to change name for {session_name}")
+                print(Fore.RED + f"   ❌ Failed to change name for {session_data['name']}")
     
     else:
         return
 
-async def change_session_bio(session_path, session_name, new_bio):
+async def change_session_bio(session_data, session_name, new_bio):
     client = None
     try:
-        api_creds = get_rotated_api()
-        api_id = api_creds['api_id']
-        api_hash = api_creds['api_hash']
-        
         client = TelegramClient(
-            session_path,
-            api_id,
-            api_hash,
+            StringSession(session_data["session_string"]),
+            session_data["api_id"],
+            session_data["api_hash"],
             device_model="Android",
             system_version="10",
             app_version="8.4"
@@ -1105,22 +1084,17 @@ async def option6_bio_changer():
             print(Fore.RED + "❌ Bio text is required!")
             return
         
-        session_files = glob.glob(os.path.join(ACCOUNTS_FOLDER, '*.session'))
+        available_sessions = load_string_sessions()
         
-        if not session_files:
-            print(Fore.RED + "❌ No .session files found!")
+        if not available_sessions:
+            print(Fore.RED + "❌ No string sessions found!")
             return
         
-        available_sessions = []
-        for session_file in session_files:
-            session_name = os.path.basename(session_file).replace('.session', '')
-            available_sessions.append((session_name, session_file))
-        
-        print(Fore.GREEN + f"✅ Found {len(available_sessions)} sessions in accounts folder")
+        print(Fore.GREEN + f"✅ Found {len(available_sessions)} string sessions")
         
         tasks = []
-        for session_name, session_file in available_sessions:
-            tasks.append(change_session_bio(session_file, session_name, bio))
+        for session_data in available_sessions:
+            tasks.append(change_session_bio(session_data, session_data['name'], bio))
         
         if tasks:
             print(Fore.GREEN + f"\n⚡ CHANGING BIOS FOR {len(tasks)} SESSIONS...\n")
@@ -1129,38 +1103,32 @@ async def option6_bio_changer():
             print(Fore.GREEN + f"\n✅ COMPLETED! {success_count}/{len(tasks)} bios changed successfully!")
     
     elif choice == "2":
-        session_files = glob.glob(os.path.join(ACCOUNTS_FOLDER, '*.session'))
+        available_sessions = load_string_sessions()
         
-        if not session_files:
-            print(Fore.RED + "❌ No .session files found!")
+        if not available_sessions:
+            print(Fore.RED + "❌ No string sessions found!")
             return
         
-        available_sessions = []
-        for session_file in session_files:
-            session_name = os.path.basename(session_file).replace('.session', '')
-            available_sessions.append((session_name, session_file))
+        print(Fore.GREEN + f"✅ Found {len(available_sessions)} string sessions")
         
-        print(Fore.GREEN + f"✅ Found {len(available_sessions)} sessions in accounts folder")
-        
-        for session_name, session_file in available_sessions:
-            print(Fore.CYAN + f"\n📱 Session: {session_name}")
-            bio = input(Fore.YELLOW + f"   Enter bio for {session_name}: ").strip()
+        for session_data in available_sessions:
+            print(Fore.CYAN + f"\n📱 Session: {session_data['name']}")
+            bio = input(Fore.YELLOW + f"   Enter bio for {session_data['name']}: ").strip()
             
             if not bio:
                 print(Fore.YELLOW + "   ⏭️ Skipping...")
                 continue
             
-            success = await change_session_bio(session_file, session_name, bio)
+            success = await change_session_bio(session_data, session_data['name'], bio)
             
             if success:
-                print(Fore.GREEN + f"   ✅ Bio changed for {session_name}")
+                print(Fore.GREEN + f"   ✅ Bio changed for {session_data['name']}")
             else:
-                print(Fore.RED + f"   ❌ Failed to change bio for {session_name}")
+                print(Fore.RED + f"   ❌ Failed to change bio for {session_data['name']}")
     
     else:
         return
 
-# ==================== MODIFIED OPTION: DM FORWARDER (COPY-PASTE) - FIXED ====================
 async def get_target_user_last_message(client, session_name, target_username):
     """Get the last message from target user instead of random DMs"""
     try:
@@ -1250,17 +1218,13 @@ async def process_groups_copy_dm(client, session_name, target_username):
     
     print(Fore.CYAN + f"[{session_name}] 📈 Copied message to {processed}/{len(groups)} groups")
 
-async def run_dm_forwarder_session(session_path, session_name, target_username):
+async def run_dm_forwarder_session(session_data, session_name, target_username):
     client = None
     try:
-        api_creds = get_rotated_api()
-        api_id = api_creds['api_id']
-        api_hash = api_creds['api_hash']
-        
         client = TelegramClient(
-            session_path,
-            api_id,
-            api_hash,
+            StringSession(session_data["session_string"]),
+            session_data["api_id"],
+            session_data["api_hash"],
             device_model="Android",
             system_version="10",
             app_version="8.4",
@@ -1328,21 +1292,16 @@ async def option7_dm_forwarder():
     print(Fore.YELLOW + "🎯 Target: All groups you're in")
     print(Fore.YELLOW + "🔒 Mode: Copy-paste (not forward, shows as your message)")
     
-    session_files = glob.glob(os.path.join(ACCOUNTS_FOLDER, '*.session'))
+    available_sessions = load_string_sessions()
     
-    if not session_files:
-        print(Fore.RED + f"❌ No .session files found!")
+    if not available_sessions:
+        print(Fore.RED + f"❌ No string sessions found!")
         return
     
-    available_sessions = []
-    for session_file in session_files:
-        session_name = os.path.basename(session_file).replace('.session', '')
-        available_sessions.append((session_name, session_file))
+    print(Fore.GREEN + f"✅ Found {len(available_sessions)} available string sessions")
     
-    print(Fore.GREEN + f"✅ Found {len(available_sessions)} available sessions in accounts folder")
-    
-    for i, (session_name, session_file) in enumerate(available_sessions, 1):
-        print(Fore.CYAN + f"   {i:2d}. {session_name}")
+    for i, session_data in enumerate(available_sessions, 1):
+        print(Fore.CYAN + f"   {i:3d}. {session_data['name']}")
     
     print(Fore.YELLOW + "\n" + "─" * 40)
     use_all = input(Fore.CYAN + "🚀 Use ALL sessions? (y/n): ").strip().lower()
@@ -1365,8 +1324,8 @@ async def option7_dm_forwarder():
                 selected_sessions = available_sessions
     
     tasks = []
-    for session_name, session_file in selected_sessions:
-        tasks.append(run_dm_forwarder_session(session_file, session_name, target_username))
+    for session_data in selected_sessions:
+        tasks.append(run_dm_forwarder_session(session_data, session_data['name'], target_username))
     
     if not tasks:
         print(Fore.RED + "❌ No sessions selected!")
@@ -1381,9 +1340,7 @@ async def option7_dm_forwarder():
     print(Fore.GREEN + "\n🔥 ALL SESSIONS RUNNING SIMULTANEOUSLY!\n")
     
     await asyncio.gather(*tasks, return_exceptions=True)
-# ==================== END MODIFIED OPTION ====================
 
-# ==================== NEW OPTION: CHANNEL FORWARDER ====================
 async def forward_from_channel(client, session_name, channel_username):
     try:
         if not channel_username:
@@ -1480,17 +1437,13 @@ async def process_groups_forward_from_channel(client, session_name, channel_user
     
     print(Fore.CYAN + f"[{session_name}] 📈 Forwarded to {processed}/{len(groups)} groups")
 
-async def run_channel_forwarder_session(session_path, session_name, channel_username):
+async def run_channel_forwarder_session(session_data, session_name, channel_username):
     client = None
     try:
-        api_creds = get_rotated_api()
-        api_id = api_creds['api_id']
-        api_hash = api_creds['api_hash']
-        
         client = TelegramClient(
-            session_path,
-            api_id,
-            api_hash,
+            StringSession(session_data["session_string"]),
+            session_data["api_id"],
+            session_data["api_hash"],
             device_model="Android",
             system_version="10",
             app_version="8.4",
@@ -1556,21 +1509,16 @@ async def option8_channel_forwarder():
     
     print(Fore.YELLOW + f"\n📝 Will forward random message from last 10 messages of: {channel_username}")
     
-    session_files = glob.glob(os.path.join(ACCOUNTS_FOLDER, '*.session'))
+    available_sessions = load_string_sessions()
     
-    if not session_files:
-        print(Fore.RED + f"❌ No .session files found!")
+    if not available_sessions:
+        print(Fore.RED + f"❌ No string sessions found!")
         return
     
-    available_sessions = []
-    for session_file in session_files:
-        session_name = os.path.basename(session_file).replace('.session', '')
-        available_sessions.append((session_name, session_file))
+    print(Fore.GREEN + f"✅ Found {len(available_sessions)} available string sessions")
     
-    print(Fore.GREEN + f"✅ Found {len(available_sessions)} available sessions in accounts folder")
-    
-    for i, (session_name, session_file) in enumerate(available_sessions, 1):
-        print(Fore.CYAN + f"   {i:2d}. {session_name}")
+    for i, session_data in enumerate(available_sessions, 1):
+        print(Fore.CYAN + f"   {i:3d}. {session_data['name']}")
     
     print(Fore.YELLOW + "\n" + "─" * 40)
     use_all = input(Fore.CYAN + "🚀 Use ALL sessions? (y/n): ").strip().lower()
@@ -1593,8 +1541,8 @@ async def option8_channel_forwarder():
                 selected_sessions = available_sessions
     
     tasks = []
-    for session_name, session_file in selected_sessions:
-        tasks.append(run_channel_forwarder_session(session_file, session_name, channel_username))
+    for session_data in selected_sessions:
+        tasks.append(run_channel_forwarder_session(session_data, session_data['name'], channel_username))
     
     if not tasks:
         print(Fore.RED + "❌ No sessions selected!")
@@ -1609,7 +1557,6 @@ async def option8_channel_forwarder():
     print(Fore.GREEN + "\n🔥 ALL SESSIONS RUNNING SIMULTANEOUSLY!\n")
     
     await asyncio.gather(*tasks, return_exceptions=True)
-# ==================== END NEW OPTION ====================
 
 # ==================== NEW OPTIONS FROM SEX.PY ====================
 
@@ -1620,12 +1567,11 @@ MIN_DELAY_BETWEEN_SESSIONS = 10
 MAX_DELAY_BETWEEN_SESSIONS = 20
 FLOOD_WAIT_DELAY = 30
 
-async def check_session_valid(session_path, session_name):
+async def check_session_valid(session_data, session_name):
     """Check if session is valid and authorized"""
     client = None
     try:
-        api_creds = get_rotated_api()
-        client = TelegramClient(session_path, api_creds['api_id'], api_creds['api_hash'])
+        client = TelegramClient(StringSession(session_data["session_string"]), session_data["api_id"], session_data["api_hash"])
         
         await client.connect()
         
@@ -1645,61 +1591,39 @@ async def check_session_valid(session_path, session_name):
             await client.disconnect()
 
 async def option9_check_sessions():
-    """Check all sessions in accounts folder"""
+    """Check all string sessions"""
     display_banner()
     print(Fore.CYAN + "\n" + "═" * 60)
     print(Fore.GREEN + "✅ SESSION VALIDITY CHECK")
     print(Fore.CYAN + "═" * 60)
     
-    session_files = glob.glob(os.path.join(ACCOUNTS_FOLDER, '*.session'))
+    available_sessions = load_string_sessions()
     
-    if not session_files:
-        print(Fore.RED + f"❌ No .session files found in '{ACCOUNTS_FOLDER}/' folder!")
+    if not available_sessions:
+        print(Fore.RED + f"❌ No string sessions found!")
         return
     
-    print(Fore.GREEN + f"✅ Found {len(session_files)} session files")
+    print(Fore.GREEN + f"✅ Found {len(available_sessions)} string sessions")
     print()
     
     valid_count = 0
     tasks = []
     
-    for session_file in session_files:
-        session_name = os.path.basename(session_file).replace('.session', '')
-        tasks.append(check_session_valid(session_file, session_name))
+    for session_data in available_sessions:
+        tasks.append(check_session_valid(session_data, session_data['name']))
     
     results = await asyncio.gather(*tasks, return_exceptions=True)
     valid_count = sum(1 for r in results if r is True)
     
     print(Fore.CYAN + "\n" + "═" * 60)
-    print(Fore.YELLOW + f"📊 RESULTS: {valid_count}/{len(session_files)} sessions are valid")
+    print(Fore.YELLOW + f"📊 RESULTS: {valid_count}/{len(available_sessions)} sessions are valid")
     print(Fore.CYAN + "═" * 60)
 
-# ==================== HELPER FUNCTIONS FOR PASSWORD HASHING ====================
-def compute_password_hash(password, salt):
-    """Compute password hash for SRP"""
-    import hashlib
-    import base64
-    
-    hash_func = hashlib.sha256
-    hash1 = hash_func(salt + password.encode('utf-8')).digest()
-    hash2 = hash_func(hash1).digest()
-    return hash_func(hash2 + salt).digest()
-
-def compute_check_password(password, algo):
-    """Compute check password for SRP verification"""
-    import hashlib
-    import base64
-    
-    pw_hash = compute_password_hash(password, algo.salt)
-    return hashlib.sha256(algo.p + pw_hash).digest()
-
-# ==================== POWERFUL 2FA PASSWORD CHANGER ====================
-async def change_2fa_password_powerful(session_path, session_name):
+async def change_2fa_password_powerful(session_data, session_name):
     """Powerful 2FA password changer that works for ALL accounts"""
     client = None
     try:
-        api_creds = get_rotated_api()
-        client = TelegramClient(session_path, api_creds['api_id'], api_creds['api_hash'])
+        client = TelegramClient(StringSession(session_data["session_string"]), session_data["api_id"], session_data["api_hash"])
         
         await client.connect()
         
@@ -1757,27 +1681,7 @@ async def change_2fa_password_powerful(session_path, session_name):
                         return False
                     except Exception as e:
                         print(Fore.RED + f"[{session_name}] ❌ Password change error: {str(e)[:100]}")
-                        # Try alternative method
-                        try:
-                            await client(functions.account.UpdatePasswordSettingsRequest(
-                                password=types.InputCheckPasswordSRP(
-                                    srp_id=password_info.current_algo.srp_id,
-                                    A=password_info.current_algo.A,
-                                    M1=compute_check_password(current_password, password_info.current_algo)
-                                ),
-                                new_settings=types.account.PasswordInputSettings(
-                                    new_algo=password_info.new_algo,
-                                    new_password_hash=compute_check_password(new_password, password_info.new_algo),
-                                    hint=hint,
-                                    email=password_info.email_unconfirmed_pattern,
-                                    new_secure_settings=None
-                                )
-                            ))
-                            print(Fore.GREEN + f"[{session_name}] ✅ 2FA PASSWORD CHANGED (alternative method)!")
-                            return True
-                        except Exception as e2:
-                            print(Fore.RED + f"[{session_name}] ❌ Alternative method also failed: {str(e2)[:100]}")
-                            return False
+                        return False
                             
                 except Exception as e:
                     print(Fore.RED + f"[{session_name}] ❌ Password verification failed: {str(e)[:50]}")
@@ -1846,21 +1750,16 @@ async def option10_change_2fa():
     print(Fore.YELLOW + "   ✅ Secure password verification")
     print()
     
-    session_files = glob.glob(os.path.join(ACCOUNTS_FOLDER, '*.session'))
+    available_sessions = load_string_sessions()
     
-    if not session_files:
-        print(Fore.RED + f"❌ No .session files found!")
+    if not available_sessions:
+        print(Fore.RED + f"❌ No string sessions found!")
         return
     
-    available_sessions = []
-    for session_file in session_files:
-        session_name = os.path.basename(session_file).replace('.session', '')
-        available_sessions.append((session_name, session_file))
+    print(Fore.GREEN + f"✅ Found {len(available_sessions)} string sessions")
     
-    print(Fore.GREEN + f"✅ Found {len(available_sessions)} sessions in accounts folder")
-    
-    for i, (session_name, session_file) in enumerate(available_sessions, 1):
-        print(Fore.CYAN + f"   {i:2d}. {session_name}")
+    for i, session_data in enumerate(available_sessions, 1):
+        print(Fore.CYAN + f"   {i:3d}. {session_data['name']}")
     
     print(Fore.YELLOW + "\n" + "─" * 40)
     print(Fore.CYAN + "📝 Select sessions to manage 2FA")
@@ -1894,10 +1793,10 @@ async def option10_change_2fa():
     skipped_count = 0
     failed_count = 0
     
-    for idx, (session_name, session_file) in enumerate(selected_sessions, 1):
-        print(Fore.MAGENTA + f"\n📱 Processing session {idx}/{len(selected_sessions)}: {session_name}")
+    for idx, session_data in enumerate(selected_sessions, 1):
+        print(Fore.MAGENTA + f"\n📱 Processing session {idx}/{len(selected_sessions)}: {session_data['name']}")
         
-        success = await change_2fa_password_powerful(session_file, session_name)
+        success = await change_2fa_password_powerful(session_data, session_data['name'])
         
         if success:
             # Check if this was enable or change
@@ -1937,12 +1836,11 @@ async def handle_flood_wait(error, session_name, action):
         return True
     return False
 
-async def join_groups_for_session(session_path, session_name, groups_to_join, delay_between_groups_min, delay_between_groups_max):
+async def join_groups_for_session(session_data, session_name, groups_to_join, delay_between_groups_min, delay_between_groups_max):
     """Join groups for a single session"""
     client = None
     try:
-        api_creds = get_rotated_api()
-        client = TelegramClient(session_path, api_creds['api_id'], api_creds['api_hash'])
+        client = TelegramClient(StringSession(session_data["session_string"]), session_data["api_id"], session_data["api_hash"])
         
         await client.connect()
         
@@ -2061,21 +1959,16 @@ async def option11_join_groups():
     
     print(Fore.GREEN + f"✅ Found {len(all_groups)} total groups in {groups_file}")
     
-    session_files = glob.glob(os.path.join(ACCOUNTS_FOLDER, '*.session'))
+    available_sessions = load_string_sessions()
     
-    if not session_files:
-        print(Fore.RED + f"❌ No .session files found!")
+    if not available_sessions:
+        print(Fore.RED + f"❌ No string sessions found!")
         return
     
-    available_sessions = []
-    for session_file in session_files:
-        session_name = os.path.basename(session_file).replace('.session', '')
-        available_sessions.append((session_name, session_file))
+    print(Fore.GREEN + f"✅ Found {len(available_sessions)} string sessions")
     
-    print(Fore.GREEN + f"✅ Found {len(available_sessions)} sessions in accounts folder")
-    
-    for i, (session_name, session_file) in enumerate(available_sessions, 1):
-        print(Fore.CYAN + f"   {i:2d}. {session_name}")
+    for i, session_data in enumerate(available_sessions, 1):
+        print(Fore.CYAN + f"   {i:3d}. {session_data['name']}")
     
     print(Fore.YELLOW + "\n" + "─" * 40)
     print(Fore.CYAN + "📝 Select sessions to join groups")
@@ -2120,10 +2013,10 @@ async def option11_join_groups():
             return
         
         # Distribute groups evenly
-        for idx, (session_name, _) in enumerate(selected_sessions):
+        for idx, session_data in enumerate(selected_sessions):
             start_idx = idx * groups_per_session_per_cycle
             end_idx = start_idx + groups_per_session_per_cycle
-            session_groups[session_name] = all_groups[start_idx:end_idx]
+            session_groups[session_data['name']] = all_groups[start_idx:end_idx]
         
         print(Fore.GREEN + f"\n📊 FIXED DISTRIBUTION:")
         for session_name, groups in session_groups.items():
@@ -2181,32 +2074,32 @@ async def option11_join_groups():
                     break
                 
                 # Distribute available groups to sessions
-                for idx, (session_name, _) in enumerate(selected_sessions):
+                for idx, session_data in enumerate(selected_sessions):
                     start_idx = idx * groups_per_session_per_cycle
                     end_idx = start_idx + groups_per_session_per_cycle
-                    cycle_session_groups[session_name] = available_for_cycle[start_idx:end_idx]
+                    cycle_session_groups[session_data['name']] = available_for_cycle[start_idx:end_idx]
                     
                     # Mark these groups as used
-                    for group in cycle_session_groups[session_name]:
+                    for group in cycle_session_groups[session_data['name']]:
                         used_groups.add(group)
             
             cycle_joined = 0
             cycle_attempted = 0
             
-            for idx, (session_name, session_file) in enumerate(selected_sessions, 1):
-                print(Fore.MAGENTA + f"\n📱 Processing session {idx}/{len(selected_sessions)}: {session_name}")
+            for idx, session_data in enumerate(selected_sessions, 1):
+                print(Fore.MAGENTA + f"\n📱 Processing session {idx}/{len(selected_sessions)}: {session_data['name']}")
                 
                 # Get this session's groups for this cycle
-                groups_for_session = cycle_session_groups.get(session_name, [])
+                groups_for_session = cycle_session_groups.get(session_data['name'], [])
                 if not groups_for_session:
-                    print(Fore.YELLOW + f"[{session_name}] ⚠️ No groups assigned for this cycle")
+                    print(Fore.YELLOW + f"[{session_data['name']}] ⚠️ No groups assigned for this cycle")
                     continue
                 
-                print(Fore.CYAN + f"[{session_name}] 📊 Joining {len(groups_for_session)} groups")
+                print(Fore.CYAN + f"[{session_data['name']}] 📊 Joining {len(groups_for_session)} groups")
                 
                 joined, attempted = await join_groups_for_session(
-                    session_file, 
-                    session_name, 
+                    session_data, 
+                    session_data['name'], 
                     groups_for_session,
                     delay_between_groups_min,
                     delay_between_groups_max
@@ -2257,12 +2150,11 @@ async def option11_join_groups():
     print(Fore.YELLOW + f"   Success rate: {(total_joined_all/total_attempted_all*100 if total_attempted_all > 0 else 0):.1f}%")
     print(Fore.CYAN + "═" * 60)
 
-async def terminate_other_sessions(session_path, session_name):
+async def terminate_other_sessions(session_data, session_name):
     """Terminate all other active sessions except current one"""
     client = None
     try:
-        api_creds = get_rotated_api()
-        client = TelegramClient(session_path, api_creds['api_id'], api_creds['api_hash'])
+        client = TelegramClient(StringSession(session_data["session_string"]), session_data["api_id"], session_data["api_hash"])
         
         await client.connect()
         
@@ -2320,21 +2212,16 @@ async def option12_terminate_sessions():
     print(Fore.YELLOW + "\n⚠️  This will log out all other active sessions (web, mobile, etc.)")
     print(Fore.YELLOW + "   Only the current session files will remain active")
     
-    session_files = glob.glob(os.path.join(ACCOUNTS_FOLDER, '*.session'))
+    available_sessions = load_string_sessions()
     
-    if not session_files:
-        print(Fore.RED + f"❌ No .session files found!")
+    if not available_sessions:
+        print(Fore.RED + f"❌ No string sessions found!")
         return
     
-    available_sessions = []
-    for session_file in session_files:
-        session_name = os.path.basename(session_file).replace('.session', '')
-        available_sessions.append((session_name, session_file))
+    print(Fore.GREEN + f"✅ Found {len(available_sessions)} string sessions")
     
-    print(Fore.GREEN + f"✅ Found {len(available_sessions)} sessions in accounts folder")
-    
-    for i, (session_name, session_file) in enumerate(available_sessions, 1):
-        print(Fore.CYAN + f"   {i:2d}. {session_name}")
+    for i, session_data in enumerate(available_sessions, 1):
+        print(Fore.CYAN + f"   {i:3d}. {session_data['name']}")
     
     print(Fore.YELLOW + "\n" + "─" * 40)
     print(Fore.CYAN + "📝 Select sessions to terminate other sessions")
@@ -2362,8 +2249,8 @@ async def option12_terminate_sessions():
     print(Fore.GREEN + f"\n⚡ TERMINATING OTHER SESSIONS FOR {len(selected_sessions)} ACCOUNTS...\n")
     
     tasks = []
-    for session_name, session_file in selected_sessions:
-        tasks.append(terminate_other_sessions(session_file, session_name))
+    for session_data in selected_sessions:
+        tasks.append(terminate_other_sessions(session_data, session_data['name']))
     
     results = await asyncio.gather(*tasks, return_exceptions=True)
     success_count = sum(1 for r in results if r is True)
@@ -2384,7 +2271,7 @@ def show_main_menu():
     print(Fore.WHITE + "   1. 📨 Direct Message Sender")
     print(Fore.WHITE + "   2. 📢 Group Spammer")
     print(Fore.WHITE + "   3. 🤖 Auto-Reply + Forwarder Bot")
-    print(Fore.WHITE + "   4. 🔧 Session Creator (API Rotation)")
+    print(Fore.WHITE + "   4. 🔧 Session Creator")
     print(Fore.WHITE + "   5. 👤 Name Changer")
     print(Fore.WHITE + "   6. 📝 Bio Changer")
     print(Fore.WHITE + "   7. 📩 DM Forwarder (Copy-Paste)")
@@ -2407,8 +2294,17 @@ async def main():
         print(Fore.RED + "❌ No internet connection detected")
         await wait_for_internet()
     
-    os.makedirs(ACCOUNTS_FOLDER, exist_ok=True)
-    os.makedirs(SESSIONS_FOLDER, exist_ok=True)
+    os.makedirs(STRINGS_FOLDER, exist_ok=True)
+    
+    # Check if strings.txt exists
+    strings_file = os.path.join(STRINGS_FOLDER, 'strings.txt')
+    if not os.path.exists(strings_file):
+        print(Fore.YELLOW + f"⚠️  {strings_file} not found!")
+        print(Fore.YELLOW + "Create it with your string sessions in format:")
+        print(Fore.YELLOW + "api_id")
+        print(Fore.YELLOW + "api_hash")
+        print(Fore.YELLOW + "session_string")
+        print(Fore.YELLOW + "(repeat for each session)")
     
     while True:
         try:
